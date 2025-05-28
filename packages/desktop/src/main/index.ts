@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { join } = require('path');
-const { createServer } = require('http');
+const { createServer, IncomingMessage, ServerResponse } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const Store = require('electron-store');
@@ -10,7 +10,7 @@ const dev = process.env.NODE_ENV !== 'production';
 const nextApp = next({ dev, dir: join(__dirname, '../../') });
 const handle = nextApp.getRequestHandler();
 
-let mainWindow: BrowserWindow | null = null;
+let mainWindow: typeof BrowserWindow.prototype | null = null;
 let rpcServer: any = null;
 
 async function createWindow() {
@@ -26,7 +26,7 @@ async function createWindow() {
 
   await nextApp.prepare();
   
-  const server = createServer((req, res) => {
+  const server = createServer((req: any, res: any) => {
     const parsedUrl = parse(req.url!, true);
     handle(req, res, parsedUrl);
   });
@@ -42,10 +42,10 @@ async function createWindow() {
 }
 
 function setupRPCServer() {
-  createServer((req, res) => {
+  createServer((req: any, res: any) => {
     if (req.method === 'POST' && req.url === '/rpc') {
       let body = '';
-      req.on('data', (chunk) => {
+      req.on('data', (chunk: any) => {
         body += chunk.toString();
       });
       req.on('end', () => {
@@ -95,7 +95,7 @@ ipcMain.handle('get-notes-directory', () => {
   return notesDir;
 });
 
-ipcMain.handle('set-notes-directory', (event, path) => {
+ipcMain.handle('set-notes-directory', (_event: any, path: string) => {
   store.set('notesDirectory', path);
   return true;
 });
@@ -109,14 +109,14 @@ async function ensureNotesDirectory() {
   return notesDir;
 }
 
-ipcMain.handle('save-note', async (event, filename, content) => {
+ipcMain.handle('save-note', async (_event: any, filename: string, content: string) => {
   const notesDir = await ensureNotesDirectory();
   const filePath = join(notesDir, filename);
   await fs.writeFile(filePath, content, 'utf8');
   return true;
 });
 
-ipcMain.handle('load-note', async (event, filename) => {
+ipcMain.handle('load-note', async (_event: any, filename: string) => {
   const notesDir = await ensureNotesDirectory();
   const filePath = join(notesDir, filename);
   const content = await fs.readFile(filePath, 'utf8');
@@ -126,10 +126,10 @@ ipcMain.handle('load-note', async (event, filename) => {
 ipcMain.handle('list-notes', async () => {
   const notesDir = await ensureNotesDirectory();
   const files = await fs.readdir(notesDir);
-  return files.filter(file => file.endsWith('.txt'));
+  return files.filter((file: string) => file.endsWith('.txt'));
 });
 
-ipcMain.handle('delete-note', async (event, filename) => {
+ipcMain.handle('delete-note', async (_event: any, filename: string) => {
   const notesDir = await ensureNotesDirectory();
   const filePath = join(notesDir, filename);
   await fs.unlink(filePath);

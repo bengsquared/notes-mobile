@@ -8,7 +8,8 @@
     "outDir": "./dist/main",
     "rootDir": "./src/main",
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
   },
   "include": ["src/main/**/*"],
   "exclude": ["node_modules"]

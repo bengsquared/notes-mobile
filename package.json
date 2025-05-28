@@ -9,9 +9,10 @@
     "build:web": "pnpm --filter @notes-app/web build",
     "build:desktop": "pnpm --filter @notes-app/desktop build",
     "build": "pnpm run build:shared && pnpm run build:web && pnpm run build:desktop",
-    "install": "pnpm install"
+    "postinstall": "echo 'Dependencies installed!'"
   },
   "devDependencies": {
+    "@types/node": "^22.15.23",
     "pnpm": "^8.14.0"
   },
   "engines": {
