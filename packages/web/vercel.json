@@ -1,0 +1,6 @@
+{
+  "buildCommand": "./prebuild.sh && next build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "framework": "nextjs"
+}

@@ -13,6 +13,7 @@ packages/*/build
 
 # next.js
 .next/
+web/.next/
 out/
 
 # production
