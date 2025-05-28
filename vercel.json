@@ -1,6 +1,6 @@
 {
-  "buildCommand": "pnpm run build:shared && pnpm run build:web",
+  "buildCommand": "npm run build:shared && npm run build:web",
   "outputDirectory": "packages/web/.next",
-  "installCommand": "pnpm install",
+  "installCommand": "npm install",
   "framework": "nextjs"
 }

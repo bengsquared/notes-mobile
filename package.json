@@ -6,12 +6,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:web": "pnpm --filter @notes-app/web dev",
-    "dev:desktop": "pnpm --filter @notes-app/desktop dev",
-    "build:shared": "pnpm --filter @notes-app/shared build",
-    "build:web": "pnpm --filter @notes-app/web build",
-    "build:desktop": "pnpm --filter @notes-app/desktop build",
-    "build": "pnpm run build:shared && pnpm run build:web && pnpm run build:desktop",
+    "dev:web": "cd packages/web && npm run dev",
+    "dev:desktop": "cd packages/desktop && npm run dev",
+    "build:shared": "cd packages/shared && npm run build",
+    "build:web": "cd packages/web && npm run build",
+    "build:desktop": "cd packages/desktop && npm run build",
+    "build": "npm run build:shared && npm run build:web && npm run build:desktop",
     "postinstall": "echo 'Install complete'"
   },
   "devDependencies": {
