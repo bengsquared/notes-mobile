@@ -2,5 +2,3 @@ packages/desktop/
 .git
 .gitignore
 README.md
-pnpm-workspace.yaml
-pnpm-lock.yaml
