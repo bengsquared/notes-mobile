@@ -2,6 +2,9 @@
   "name": "notes-app",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev:web": "pnpm --filter @notes-app/web dev",
     "dev:desktop": "pnpm --filter @notes-app/desktop dev",
@@ -9,7 +12,7 @@
     "build:web": "pnpm --filter @notes-app/web build",
     "build:desktop": "pnpm --filter @notes-app/desktop build",
     "build": "pnpm run build:shared && pnpm run build:web && pnpm run build:desktop",
-    "postinstall": "echo 'Dependencies installed!'"
+    "postinstall": "echo 'Install complete'"
   },
   "devDependencies": {
     "@types/node": "^22.15.23",

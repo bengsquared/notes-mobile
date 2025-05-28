@@ -1,0 +1,5 @@
+packages/desktop
+.git
+.gitignore
+README.md
+pnpm-workspace.yaml
