@@ -1,6 +1,6 @@
 {
   "buildCommand": "npm run build:shared && npm run build:web",
   "outputDirectory": "packages/web/.next",
-  "installCommand": "npm install",
+  "installCommand": "npm install --legacy-peer-deps",
   "framework": "nextjs"
 }

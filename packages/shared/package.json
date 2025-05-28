@@ -4,10 +4,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "build": "npx tsc",
+    "dev": "npx tsc --watch"
   },
   "devDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.0.0"
   }
 }
