@@ -14,6 +14,9 @@ importers:
       pnpm:
         specifier: ^8.14.0
         version: 8.15.9
+      typescript:
+        specifier: ^5.0.0
+        version: 5.8.3
 
   packages/desktop:
     dependencies:
@@ -106,7 +109,7 @@ importers:
   packages/shared:
     devDependencies:
       typescript:
-        specifier: ^5
+        specifier: ^5.0.0
         version: 5.8.3
 
   packages/web:
@@ -264,7 +267,7 @@ importers:
     devDependencies:
       '@types/node':
         specifier: ^22
-        version: 22.0.0
+        version: 22.15.23
       '@types/react':
         specifier: ^19
         version: 19.0.0
@@ -1329,9 +1332,6 @@ packages:
 
   '@types/node@20.17.51':
     resolution: {integrity: sha512-hccptBl7C8lHiKxTBsY6vYYmqpmw1E/aGR/8fmueE+B390L3pdMOpNSRvFO4ZnXzW5+p2HBXV0yNABd2vdk22Q==}
-
-  '@types/node@22.0.0':
-    resolution: {integrity: sha512-VT7KSYudcPOzP5Q0wfbowyNLaVR8QWUdw+088uFWwfvpY6uCWaXpqV6ieLAu9WBcnTa7H4Z5RLK8I5t2FuOcqw==}
 
   '@types/node@22.15.23':
     resolution: {integrity: sha512-7Ec1zaFPF4RJ0eXu1YT/xgiebqwqoJz8rYPDi/O2BcZ++Wpt0Kq9cl0eg6NN6bYbPnR67ZLo7St5Q3UK0SnARw==}
@@ -2989,9 +2989,6 @@ packages:
   undici-types@5.26.5:
     resolution: {integrity: sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==}
 
-  undici-types@6.11.1:
-    resolution: {integrity: sha512-mIDEX2ek50x0OlRgxryxsenE5XaQD4on5U2inY7RApK3SOJpofyw7uW2AyfMKkhAxXIceo2DeWGVGwyvng1GNQ==}
-
   undici-types@6.19.8:
     resolution: {integrity: sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw==}
 
@@ -4367,7 +4364,7 @@ snapshots:
     dependencies:
       '@types/http-cache-semantics': 4.0.4
       '@types/keyv': 3.1.4
-      '@types/node': 22.0.0
+      '@types/node': 22.15.23
       '@types/responselike': 1.0.3
 
   '@types/d3-array@3.2.1': {}
@@ -4400,13 +4397,13 @@ snapshots:
 
   '@types/fs-extra@9.0.13':
     dependencies:
-      '@types/node': 22.0.0
+      '@types/node': 22.15.23
 
   '@types/http-cache-semantics@4.0.4': {}
 
   '@types/keyv@3.1.4':
     dependencies:
-      '@types/node': 22.0.0
+      '@types/node': 22.15.23
 
   '@types/ms@2.1.0': {}
 
@@ -4418,17 +4415,13 @@ snapshots:
     dependencies:
       undici-types: 6.19.8
 
-  '@types/node@22.0.0':
-    dependencies:
-      undici-types: 6.11.1
-
   '@types/node@22.15.23':
     dependencies:
       undici-types: 6.21.0
 
   '@types/plist@3.0.5':
     dependencies:
-      '@types/node': 22.0.0
+      '@types/node': 22.15.23
       xmlbuilder: 15.1.1
     optional: true
 
@@ -4453,14 +4446,14 @@ snapshots:
 
   '@types/responselike@1.0.3':
     dependencies:
-      '@types/node': 22.0.0
+      '@types/node': 22.15.23
 
   '@types/verror@1.10.11':
     optional: true
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 22.0.0
+      '@types/node': 22.15.23
     optional: true
 
   '@xmldom/xmldom@0.8.10': {}
@@ -6247,8 +6240,6 @@ snapshots:
   typescript@5.8.3: {}
 
   undici-types@5.26.5: {}
-
-  undici-types@6.11.1: {}
 
   undici-types@6.19.8: {}
 
