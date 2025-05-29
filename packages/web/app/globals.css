@@ -47,3 +47,10 @@
     font-size: 16px; /* Prevent zoom on iOS */
   }
 }
+
+/* Safe area handling for mobile devices */
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+  }
+}

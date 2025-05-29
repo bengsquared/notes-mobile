@@ -6,12 +6,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:web": "cd packages/web && npm run dev",
-    "dev:desktop": "cd packages/desktop && npm run dev",
-    "build:shared": "cd packages/shared && npm run build",
-    "build:web": "cd packages/web && npm run build",
-    "build:desktop": "cd packages/desktop && npm run build",
-    "build": "npm run build:shared && npm run build:web && npm run build:desktop",
+    "dev:web": "cd packages/web && pnpm run dev",
+    "dev:desktop": "cd packages/desktop && pnpm run dev",
+    "build:shared": "cd packages/shared && pnpm run build",
+    "build:web": "cd packages/web && pnpm run build",
+    "build:desktop": "cd packages/desktop && pnpm run build",
+    "build": "pnpm run build:shared && pnpm run build:web && pnpm run build:desktop",
     "postinstall": "echo 'Install complete'"
   },
   "devDependencies": {

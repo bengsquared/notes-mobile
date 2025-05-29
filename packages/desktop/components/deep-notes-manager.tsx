@@ -1,25 +1,25 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from './ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { ScrollArea } from './ui/scroll-area'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Textarea } from './ui/textarea'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
+import { Badge } from './ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Search, Plus, Edit, Link2, Tag, FolderOpen } from 'lucide-react'
 import { DeepNote, Collection } from '@notes-app/shared'
 
 export function DeepNotesManager() {
   const [notes, setNotes] = useState<DeepNote[]>([])
-  const [collections, setCollections] = useState<Collection[]>([])
+  const [collections] = useState<Collection[]>([])
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedNote, setSelectedNote] = useState<DeepNote | null>(null)
   const [showNoteDialog, setShowNoteDialog] = useState(false)
-  const [showLinkDialog, setShowLinkDialog] = useState(false)
+  const [, setShowLinkDialog] = useState(false)
   const [editMode, setEditMode] = useState(false)
 
   // Load notes on mount

@@ -1,15 +1,9 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const { join } = require('path');
-const { createServer, IncomingMessage, ServerResponse } = require('http');
-const { parse } = require('url');
-const next = require('next');
+const { createServer } = require('http');
 const Store = require('electron-store');
 
 const store = new Store();
-const dev = process.env.NODE_ENV !== 'production';
-const nextApp = next({ dev, dir: join(__dirname, '../../') });
-const handle = nextApp.getRequestHandler();
-
 let mainWindow: typeof BrowserWindow.prototype | null = null;
 let rpcServer: any = null;
 
@@ -20,21 +14,18 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: join(__dirname, 'preload.js')
+      preload: join(__dirname, '../preload/index.js')
     }
   });
 
-  await nextApp.prepare();
-  
-  const server = createServer((req: any, res: any) => {
-    const parsedUrl = parse(req.url!, true);
-    handle(req, res, parsedUrl);
-  });
-
-  server.listen(3001, () => {
-    console.log('> Ready on http://localhost:3001');
-    mainWindow?.loadURL('http://localhost:3001');
-  });
+  // In development, Vite will provide the dev server
+  const isDev = process.env.NODE_ENV !== 'production';
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  } else {
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -43,6 +34,17 @@ async function createWindow() {
 
 function setupRPCServer() {
   createServer((req: any, res: any) => {
+    // Set CORS headers
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
     if (req.method === 'POST' && req.url === '/rpc') {
       let body = '';
       req.on('data', (chunk: any) => {
@@ -51,17 +53,25 @@ function setupRPCServer() {
       req.on('end', () => {
         try {
           const data = JSON.parse(body);
-          if (data.method === 'transferNotes' && data.params?.notes) {
+          
+          // Handle ping method
+          if (data.method === 'ping') {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jsonrpc: '2.0', result: 'pong', id: data.id }));
+          } 
+          // Handle transferNotes method
+          else if (data.method === 'transferNotes' && data.params?.notes) {
+            console.log('Received notes:', JSON.stringify(data.params.notes, null, 2));
             mainWindow?.webContents.send('notes-received', data.params.notes);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true }));
+            res.end(JSON.stringify({ jsonrpc: '2.0', result: { success: true }, id: data.id }));
           } else {
-            res.writeHead(400);
-            res.end(JSON.stringify({ error: 'Invalid request' }));
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32601, message: 'Method not found' }, id: data.id }));
           }
         } catch (error) {
-          res.writeHead(500);
-          res.end(JSON.stringify({ error: 'Server error' }));
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null }));
         }
       });
     } else {

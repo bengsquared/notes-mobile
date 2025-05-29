@@ -2,9 +2,9 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  title: 'Notes App',
+  description: 'Mobile-friendly notes application',
+  viewport: 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover',
 }
 
 export default function RootLayout({

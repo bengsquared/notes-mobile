@@ -1,8 +1,8 @@
 {
   "components/export-notes.tsx -> jszip": {
-    "id": 6471,
+    "id": "components/export-notes.tsx -> jszip",
     "files": [
-      "static/chunks/471.fcd413df5e8243d7.js"
+      "static/chunks/_app-pages-browser_node_modules_jszip_dist_jszip_min_js.js"
     ]
   }
 }

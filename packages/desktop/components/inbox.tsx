@@ -1,16 +1,24 @@
 'use client'
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Badge } from '@/components/ui/badge'
-import { FileText, Trash2, Archive } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Button } from './ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { ScrollArea } from './ui/scroll-area'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
+import { Textarea } from './ui/textarea'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
+import { Badge } from './ui/badge'
+import { FileText, Trash2, Archive, Wifi, WifiOff, RefreshCw, ExternalLink } from 'lucide-react'
 import { Note, DeepNote } from '@notes-app/shared'
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      saveNote: (filename: string, content: string) => Promise<void>
+    }
+  }
+}
 
 interface InboxProps {
   notes: Note[]
@@ -22,6 +30,27 @@ export function Inbox({ notes, onProcessNote }: InboxProps) {
   const [showProcessDialog, setShowProcessDialog] = useState(false)
   const [title, setTitle] = useState('')
   const [tags, setTags] = useState('')
+  const [rpcStatus, setRpcStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking')
+
+  // Check RPC server status
+  const checkRpcStatus = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'ping', params: {}, id: 1 })
+      })
+      setRpcStatus(response.ok ? 'connected' : 'disconnected')
+    } catch {
+      setRpcStatus('disconnected')
+    }
+  }
+
+  useEffect(() => {
+    checkRpcStatus()
+    const interval = setInterval(checkRpcStatus, 5000) // Check every 5 seconds
+    return () => clearInterval(interval)
+  }, [])
 
   const processNote = async () => {
     if (!selectedNote || !title.trim()) return
@@ -57,7 +86,29 @@ export function Inbox({ notes, onProcessNote }: InboxProps) {
     <>
       <div className="h-full flex flex-col p-4">
         <div className="mb-4">
-          <h2 className="text-2xl font-bold">Inbox</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-2xl font-bold">Inbox</h2>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                {rpcStatus === 'connected' ? (
+                  <Wifi className="h-4 w-4 text-green-600" />
+                ) : (
+                  <WifiOff className="h-4 w-4 text-red-600" />
+                )}
+                <span className="text-sm text-muted-foreground">
+                  RPC Server {rpcStatus === 'connected' ? 'Connected' : 'Disconnected'}
+                </span>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={checkRpcStatus}
+                title="Check connection status"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
           <p className="text-muted-foreground">Process your captured notes</p>
         </div>
 
@@ -67,9 +118,40 @@ export function Inbox({ notes, onProcessNote }: InboxProps) {
               <Card className="p-8 text-center">
                 <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                 <p className="text-muted-foreground">No notes in inbox</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Transfer notes from your mobile app to see them here
-                </p>
+                <div className="mt-4 space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Transfer notes from your web app to see them here
+                  </p>
+                  {rpcStatus === 'connected' ? (
+                    <div className="space-y-2">
+                      <Badge variant="outline" className="text-green-600">
+                        <Wifi className="h-3 w-3 mr-1" />
+                        RPC Server is running on port 8080
+                      </Badge>
+                      <p className="text-xs text-muted-foreground">
+                        From your web app, click "Transfer to Desktop" to send notes here
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <Badge variant="outline" className="text-red-600">
+                        <WifiOff className="h-3 w-3 mr-1" />
+                        RPC Server not detected
+                      </Badge>
+                      <p className="text-xs text-muted-foreground">
+                        Make sure the desktop app is running to receive notes
+                      </p>
+                    </div>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open('http://localhost:3000', '_blank')}
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Open Web App
+                  </Button>
+                </div>
               </Card>
             ) : (
               notes.map((note) => (
@@ -112,6 +194,9 @@ export function Inbox({ notes, onProcessNote }: InboxProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Process Note</DialogTitle>
+            <DialogDescription>
+              Convert this note into a deep note with a title and tags for better organization.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
