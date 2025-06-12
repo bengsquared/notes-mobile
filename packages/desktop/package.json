@@ -12,6 +12,7 @@
     "start": "../../node_modules/.bin/electron out/main/index.js",
     "electron": "../../node_modules/.bin/electron out/main/index.js",
     "mcp": "../../node_modules/.bin/electron out/main/index.js --mcp",
+    "dev:mcp": "pnpm run build && pnpm run mcp",
     "dist": "pnpm run build && electron-builder"
   },
   "dependencies": {
@@ -49,7 +50,6 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
-    "date-fns": "4.1.0",
     "electron-store": "^8.1.0",
     "embla-carousel-autoplay": "^8.6.0",
     "embla-carousel-react": "8.5.1",
@@ -88,11 +88,11 @@
     "productName": "Notes Desktop",
     "electronVersion": "36.3.1",
     "icon": "resources/logo.png",
+    "electronLanguages": ["en", "en-US"],
     "directories": {
       "output": "dist/electron"
     },
     "files": [
-      "dist/**/*",
       "out/**/*",
       "package.json"
     ],

@@ -33,6 +33,15 @@ export class NotesMCPServer {
       }
     );
 
+    // Add global error handler
+    process.on('uncaughtException', (error) => {
+      console.error('Uncaught exception in MCP server:', error);
+    });
+    
+    process.on('unhandledRejection', (reason) => {
+      console.error('Unhandled rejection in MCP server:', reason);
+    });
+
     this.setupHandlers();
   }
 
@@ -63,16 +72,6 @@ export class NotesMCPServer {
   }
 
   private setupHandlers() {
-    // Add handlers for resources and prompts that Claude Desktop expects
-    this.server.setRequestHandler(
-      { method: 'resources/list', jsonrpc: '2.0' } as any,
-      async () => ({ resources: [] })
-    );
-    
-    this.server.setRequestHandler(
-      { method: 'prompts/list', jsonrpc: '2.0' } as any,
-      async () => ({ prompts: [] })
-    );
 
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -114,6 +113,15 @@ export class NotesMCPServer {
           {
             name: 'list_all_notes',
             description: 'Get overview of all structured notes (excludes inbox) with titles, metadata, and previews',
+            inputSchema: {
+              type: 'object',
+              properties: {},
+              additionalProperties: false,
+            },
+          },
+          {
+            name: 'list_ideas',
+            description: 'Get all ideas from inbox - these are raw captures/quick thoughts that need review and processing into structured notes',
             inputSchema: {
               type: 'object',
               properties: {},
@@ -178,30 +186,30 @@ export class NotesMCPServer {
             },
           },
           {
-            name: 'search_notes',
-            description: 'Search notes with filtering options',
+            name: 'search_knowledge',
+            description: 'Intelligent search across the entire knowledge base including notes, concepts, and optionally ideas. Returns comprehensive results with context and relationships for AI analysis.',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query text',
+                  description: 'Search query - can be keywords, concepts, or natural language questions',
                 },
-                includeInbox: {
+                includeIdeas: {
                   type: 'boolean',
-                  description: 'Include inbox notes in search',
+                  description: 'Include unprocessed ideas from inbox in search results',
                   default: false,
                 },
-                concepts: {
+                conceptFilter: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: 'Filter by specific concepts',
+                  description: 'Filter results by specific concepts',
                 },
-                sortBy: {
+                contextDepth: {
                   type: 'string',
-                  enum: ['modified', 'created', 'title'],
-                  description: 'Sort order for results',
-                  default: 'modified',
+                  enum: ['summary', 'detailed', 'full'],
+                  description: 'Amount of context to return per result',
+                  default: 'detailed',
                 },
               },
               required: ['query'],
@@ -255,7 +263,7 @@ export class NotesMCPServer {
           },
           {
             name: 'suggest_inbox_processing',
-            description: 'Analyze inbox content and suggest how to process it (merge with existing notes, create new notes, extract concepts)',
+            description: 'AI-powered analysis of inbox ideas with specific processing recommendations. Returns actionable suggestions for promoting ideas to notes, extracting concepts, and identifying connections.',
             inputSchema: {
               type: 'object',
               properties: {},
@@ -263,47 +271,28 @@ export class NotesMCPServer {
             },
           },
           {
-            name: 'update_note_content',
-            description: 'Update the content of an existing note',
+            name: 'enrich_note',
+            description: 'Enhance an existing note with additional content, concepts, or connections. Supports both content expansion and metadata enrichment.',
             inputSchema: {
               type: 'object',
               properties: {
                 filename: {
                   type: 'string',
-                  description: 'The filename of the note to update',
+                  description: 'The filename of the note to enrich',
                 },
-                content: {
+                additionalContent: {
                   type: 'string',
-                  description: 'The new content for the note',
+                  description: 'New content to append to the note',
                 },
-              },
-              required: ['filename', 'content'],
-              additionalProperties: false,
-            },
-          },
-          {
-            name: 'update_note_metadata',
-            description: 'Update note metadata (title, concepts, links)',
-            inputSchema: {
-              type: 'object',
-              properties: {
-                filename: {
-                  type: 'string',
-                  description: 'The filename of the note to update',
-                },
-                title: {
-                  type: 'string',
-                  description: 'New title for the note',
-                },
-                concepts: {
+                newConcepts: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: 'Replace all concepts with this list',
+                  description: 'Additional concepts to tag this note with',
                 },
-                links: {
+                newLinks: {
                   type: 'array',
                   items: { type: 'string' },
-                  description: 'Replace all links with this list',
+                  description: 'Additional note connections to establish',
                 },
               },
               required: ['filename'],
@@ -391,69 +380,41 @@ export class NotesMCPServer {
             },
           },
           {
-            name: 'create_note',
-            description: 'Create a new note with content and metadata',
+            name: 'capture_idea',
+            description: 'Capture a new raw idea into the inbox for later processing. This is the entry point for all new thoughts, observations, and insights in the Deep Notes methodology.',
             inputSchema: {
               type: 'object',
               properties: {
-                filename: {
-                  type: 'string',
-                  description: 'Filename for the new note (must end with .txt)',
-                },
                 content: {
                   type: 'string',
-                  description: 'Content for the new note',
-                },
-                title: {
-                  type: 'string',
-                  description: 'Title for the note',
-                },
-                concepts: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Concepts to tag the note with',
-                },
-                location: {
-                  type: 'string',
-                  enum: ['inbox', 'notes'],
-                  description: 'Where to create the note (default: notes)',
-                  default: 'notes',
+                  description: 'The raw idea content - can be unstructured thoughts, observations, quotes, or insights',
                 },
               },
-              required: ['filename', 'content'],
+              required: ['content'],
               additionalProperties: false,
             },
           },
           {
-            name: 'process_inbox_item',
-            description: 'Process a single inbox item - convert to note, merge with existing, or delete',
+            name: 'promote_idea_to_note',
+            description: 'Transform a raw idea from the inbox into a structured note with title and concepts. This is the key processing step in the Deep Notes methodology.',
             inputSchema: {
               type: 'object',
               properties: {
-                filename: {
+                ideaFilename: {
                   type: 'string',
-                  description: 'Inbox item filename to process',
-                },
-                action: {
-                  type: 'string',
-                  enum: ['create_note', 'merge_with_note', 'delete'],
-                  description: 'What to do with the inbox item',
-                },
-                targetFilename: {
-                  type: 'string',
-                  description: 'For create_note: new filename; for merge_with_note: existing note filename',
-                },
-                appendContent: {
-                  type: 'boolean',
-                  description: 'For merge_with_note: append content (true) or prepend (false)',
-                  default: true,
+                  description: 'The inbox idea filename to promote',
                 },
                 title: {
                   type: 'string',
-                  description: 'For create_note: title for the new note',
+                  description: 'Clear, descriptive title for the structured note',
+                },
+                concepts: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Key concepts to tag this note with for knowledge graph connections',
                 },
               },
-              required: ['filename', 'action'],
+              required: ['ideaFilename', 'title'],
               additionalProperties: false,
             },
           },
@@ -616,9 +577,16 @@ export class NotesMCPServer {
 
     // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
-
       try {
+        if (!request || !request.params) {
+          throw new Error('Invalid request: missing params');
+        }
+        
+        const { name, arguments: args } = request.params;
+        
+        if (!name) {
+          throw new Error('Invalid request: missing tool name');
+        }
         switch (name) {
           case 'get_storage_config':
             return await this.getStorageConfig();
@@ -631,12 +599,13 @@ export class NotesMCPServer {
 
           // Tools that require storage to be initialized
           case 'list_all_notes':
+          case 'list_ideas':
           case 'list_inbox_notes':
           case 'list_all_concepts':
           case 'get_knowledge_stats':
           case 'read_note':
           case 'read_concept':
-          case 'search_notes':
+          case 'search_knowledge':
           case 'get_note_relationships':
           case 'get_concept_relationships':
           case 'analyze_note_content':
@@ -649,7 +618,8 @@ export class NotesMCPServer {
           case 'remove_links_from_note':
           case 'process_inbox_item':
           case 'merge_notes':
-          case 'create_note':
+          case 'capture_idea':
+          case 'promote_idea_to_note':
           case 'rename_note':
           case 'list_media_for_note':
           case 'save_media':
@@ -667,6 +637,9 @@ export class NotesMCPServer {
           case 'list_all_notes':
             return await this.listAllNotes();
 
+          case 'list_ideas':
+            return await this.listIdeas();
+
           case 'list_inbox_notes':
             return await this.listInboxNotes();
 
@@ -682,11 +655,11 @@ export class NotesMCPServer {
           case 'read_concept':
             return await this.readConcept(args.name as string);
 
-          case 'search_notes':
-            return await this.searchNotes(args.query as string, {
-              includeInbox: args.includeInbox,
-              concepts: args.concepts,
-              sortBy: args.sortBy,
+          case 'search_knowledge':
+            return await this.searchKnowledge(args.query as string, {
+              includeIdeas: args.includeIdeas,
+              conceptFilter: args.conceptFilter,
+              contextDepth: args.contextDepth,
             });
 
           case 'get_note_relationships':
@@ -743,15 +716,15 @@ export class NotesMCPServer {
               }
             );
 
-          case 'create_note':
-            return await this.createNote({
-              filename: args.filename as string,
-              content: args.content as string,
-              title: args.title,
-              concepts: args.concepts,
-              links: args.links,
-              location: args.location as 'notes' | 'inbox' || 'notes',
-            });
+          case 'capture_idea':
+            return await this.captureIdea(args.content as string);
+
+          case 'promote_idea_to_note':
+            return await this.promoteIdeaToNote(
+              args.ideaFilename as string,
+              args.title as string,
+              args.concepts as string[]
+            );
 
           case 'rename_note':
             return await this.renameNote(args.oldFilename as string, args.newFilename as string);
@@ -821,6 +794,24 @@ export class NotesMCPServer {
     );
 
     return this.createSuccessResponse(notesWithPreviews);
+  }
+
+  private async listIdeas() {
+    const ideas = await this.notesStorage!.listIdeas();
+    const result = {
+      workflow_note: "These are raw captures that need review. Users should regularly process ideas by either: 1) Promoting to structured notes, 2) Adding concepts, or 3) Deleting if no longer relevant",
+      ideas_count: ideas.length,
+      items: ideas.map(idea => ({
+        id: idea.id,
+        filename: idea.filename,
+        content: idea.content,
+        created: idea.created,
+        modified: idea.modified,
+        metadata: idea.metadata
+      }))
+    };
+
+    return this.createSuccessResponse(result);
   }
 
   private async listInboxNotes() {
@@ -901,29 +892,38 @@ export class NotesMCPServer {
     return this.createSuccessResponse(concept);
   }
 
-  private async searchNotes(query: string, options: any = {}) {
-    // Map MCP options to storage SearchOptions interface
+  private async searchKnowledge(query: string, options: any = {}) {
     const searchOptions = {
-      includeInbox: options.includeInbox || false,
-      concepts: options.concepts || undefined,
-      sortBy: (options.sortBy as 'modified' | 'created' | 'title') || 'modified'
+      includeInbox: options.includeIdeas || false,
+      concepts: options.conceptFilter || undefined,
+      sortBy: 'modified' as const
     };
     
-    const results = await this.notesStorage!.searchNotes(query, searchOptions);
+    const noteResults = await this.notesStorage!.searchNotes(query, searchOptions);
     
-    // Enhanced response with search metadata
+    // Get preview length based on context depth
+    const previewLength = options.contextDepth === 'full' ? 500 : 
+                         options.contextDepth === 'summary' ? 50 : 150;
+    
     const response = {
       query: query,
-      options: searchOptions,
-      resultCount: results.length,
-      results: results.map(note => ({
+      totalResults: noteResults.length,
+      contextDepth: options.contextDepth || 'detailed',
+      aiGuidance: `Found ${noteResults.length} results. Use 'read_note' for full content, 'get_note_relationships' to explore connections, or 'capture_idea' to add related thoughts.`,
+      results: noteResults.map(note => ({
         filename: note.filename,
         title: note.metadata.title,
         location: note.location,
-        preview: note.content.substring(0, 100).replace(/\n/g, ' ') + (note.content.length > 100 ? '...' : ''),
+        preview: note.content.substring(0, previewLength).replace(/\n/g, ' ') + (note.content.length > previewLength ? '...' : ''),
         concepts: note.metadata.concepts || [],
-        created: note.metadata.created,
-        modified: note.metadata.modified
+        conceptCount: note.metadata.concepts?.length || 0,
+        lastModified: note.metadata.modified,
+        relevanceIndicators: {
+          hasMatchingConcepts: options.conceptFilter ? 
+            note.metadata.concepts?.some(c => options.conceptFilter.includes(c)) : false,
+          isRecentlyModified: note.metadata.modified ? 
+            (new Date().getTime() - new Date(note.metadata.modified).getTime()) < (7 * 24 * 60 * 60 * 1000) : false
+        }
       }))
     };
     
@@ -1477,39 +1477,27 @@ The app executable is located at: ${appPath}`,
     };
   }
 
-  private async createNote(options: {
-    filename: string;
-    content: string;
-    title?: string;
-    concepts?: string[];
-    links?: string[];
-    location: 'notes' | 'inbox';
-  }) {
-    // Check if filename is unique
-    const isUnique = await this.notesStorage!.checkFilenameUnique(options.filename);
-    if (!isUnique) {
-      throw new Error(`A note with filename "${options.filename}" already exists`);
-    }
-    
-    const metadata = {
-      title: options.title,
-      concepts: options.concepts,
-      links: options.links,
-      created: new Date().toISOString(),
-      modified: new Date().toISOString()
-    };
-    
-    const fullFilename = options.location === 'inbox' 
-      ? `inbox/${options.filename}`
-      : options.filename;
-    
-    await this.notesStorage!.saveNote(fullFilename, options.content, metadata);
+  private async captureIdea(content: string) {
+    const idea = await this.notesStorage!.createIdea(content);
     
     return {
       content: [
         {
           type: 'text',
-          text: `Created new note: ${fullFilename}`,
+          text: `💡 Captured idea: ${idea.filename}\n\nNext steps: Use 'promote_idea_to_note' to transform this into a structured note with title and concepts.`,
+        },
+      ],
+    };
+  }
+
+  private async promoteIdeaToNote(ideaFilename: string, title: string, concepts?: string[]) {
+    const note = await this.notesStorage!.promoteIdeaToNote(ideaFilename, title, concepts);
+    
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `✅ Promoted idea to structured note: ${note.filename}\n\nConcepts: ${concepts?.join(', ') || 'none'}\nThe idea has been moved from inbox to your knowledge base.`,
         },
       ],
     };
@@ -1600,9 +1588,25 @@ The app executable is located at: ${appPath}`,
   }
 
   async start() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    // Only log to stderr on startup - this is fine since it's just one informational message
-    console.error('Notes MCP Server started on stdio');
+    try {
+      const transport = new StdioServerTransport();
+      
+      // Add error handling for transport
+      transport.onError = (error: any) => {
+        console.error('MCP Transport error:', error);
+      };
+      
+      await this.server.connect(transport);
+      
+      // Add error handling for the server
+      this.server.onError = (error: any) => {
+        console.error('MCP Server error:', error);
+      };
+      
+      console.error('Notes MCP Server started on stdio');
+    } catch (error) {
+      console.error('Failed to start MCP server:', error);
+      throw error;
+    }
   }
 }

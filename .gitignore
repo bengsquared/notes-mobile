@@ -13,12 +13,21 @@ packages/*/build
 
 # next.js
 .next/
-web/.next/
+packages/web/.next/
 out/
 
 # production
 build
 dist
+
+# electron builds
+packages/desktop/dist/
+packages/desktop/out/
+packages/desktop/release/
+
+# package outputs
+*.tgz
+*.tar.gz
 
 # debug
 npm-debug.log*
@@ -59,3 +68,12 @@ coverage
 
 # misc
 *.log
+
+# development files
+.mcp.json
+extracted_app/
+mcp-dev.sh
+mcp-server-runner.js
+
+# test/temp directories
+test-notes/

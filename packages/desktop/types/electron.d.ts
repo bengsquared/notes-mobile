@@ -111,7 +111,12 @@ export interface ElectronAPI {
   // Storage operations
   storage: {
     getConfig: () => Promise<StorageConfig>
-    generateMCPConfig: () => Promise<boolean>
+    generateMCPConfig: () => Promise<{
+      configPath: string
+      mcpConfig: { mcpServers: { [key: string]: { command: string; args: string[]; description: string } } }
+      appPath: string
+      isDev: boolean
+    }>
   }
 
   // Transfer operations
@@ -126,6 +131,17 @@ export interface ElectronAPI {
     clearPin: () => Promise<boolean>
     clearTransferPin: () => Promise<boolean>
   }
+
+  // Top-level APIs (for settings page compatibility)
+  getStorageConfig: () => Promise<StorageConfig>
+  generateMCPConfig: () => Promise<{
+    configPath: string
+    mcpConfig: { mcpServers: { [key: string]: { command: string; args: string[]; description: string } } }
+    appPath: string
+    isDev: boolean
+  }>
+  selectNotesDirectory: () => Promise<string | null>
+  restartApp: () => Promise<void>
 }
 
 declare global {

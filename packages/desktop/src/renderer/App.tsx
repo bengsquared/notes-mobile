@@ -11,14 +11,25 @@ export default function App() {
     // Check if storage directory is configured
     const checkStorageConfig = async () => {
       try {
+        console.log('App: Checking storage config...')
         const config = await window.electronAPI.storage.getConfig()
-        if (!config.notesDirectory) {
-          setShowFolderSelection(true)
+        console.log('App: Storage config response:', config)
+        
+        if (config.notesDirectory) {
+          if (config.initialized) {
+            console.log('App: Storage is initialized, proceeding to main app')
+            setIsInitialized(true)
+          } else {
+            console.log('App: Directory exists but storage not initialized, waiting...')
+            // Storage is being initialized, wait a bit and check again
+            setTimeout(() => checkStorageConfig(), 500)
+          }
         } else {
-          setIsInitialized(true)
+          console.log('App: No directory configured, showing folder selection')
+          setShowFolderSelection(true)
         }
       } catch (error) {
-        console.error('Error checking storage config:', error)
+        console.error('App: Error checking storage config:', error)
         setShowFolderSelection(true)
       }
     }

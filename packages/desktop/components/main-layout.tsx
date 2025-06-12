@@ -34,13 +34,32 @@ export function MainLayout() {
   // Sync DataContext ideas with layout state for inbox
   React.useEffect(() => {
     if (layoutState.view === 'inbox') {
-      setLayoutState(prev => ({
-        ...prev,
-        inboxNotes: ideas,
-        inboxCount: ideas.length,
-        // Set default selection to first item if no selection exists and we have items
-        inboxCurrentIndex: prev.inboxCurrentIndex !== undefined ? prev.inboxCurrentIndex : (ideas.length > 0 ? 0 : undefined)
-      }))
+      setLayoutState(prev => {
+        // Handle empty inbox case
+        if (ideas.length === 0) {
+          return {
+            ...prev,
+            inboxNotes: [],
+            inboxCount: 0,
+            inboxCurrentIndex: undefined
+          }
+        }
+        
+        // Handle non-empty inbox
+        let newIndex = prev.inboxCurrentIndex;
+        
+        // If no index set or current index is out of bounds, default to first item
+        if (newIndex === undefined || newIndex >= ideas.length) {
+          newIndex = 0;
+        }
+        
+        return {
+          ...prev,
+          inboxNotes: ideas,
+          inboxCount: ideas.length,
+          inboxCurrentIndex: newIndex
+        }
+      })
     }
   }, [ideas, layoutState.view])
   
@@ -102,42 +121,14 @@ export function MainLayout() {
     setCurrentConcept(updatedConcept)
   }
 
-  // Settings view without right sidebar
+  // Settings view - full screen without any sidebars
   if (layoutState.view === 'settings') {
     return (
       <div className="h-screen">
-        {/* Left Navigation Sidebar - Collapsible */}
-        {!leftSidebarCollapsed && (
-          <div className="w-64 border-r flex-shrink-0" style={{ minWidth: '12rem' }}>
-            <NavigationSidebar 
-              layoutState={layoutState}
-              onStateChange={setLayoutState}
-              onToggleCollapse={() => setLeftSidebarCollapsed(true)}
-            />
-          </div>
-        )}
-        
-        {/* Collapsed sidebar toggle */}
-        {leftSidebarCollapsed && (
-          <div className="w-12 border-r flex-shrink-0 bg-background flex flex-col items-center py-4">
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => setLeftSidebarCollapsed(false)}
-              className="w-8 h-8 p-0"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-        
-        {/* Center Content Area - Scrollable settings content */}
-        <div className="flex-1 overflow-hidden">
-          <CenterPane 
-            layoutState={layoutState}
-            onStateChange={setLayoutState}
-          />
-        </div>
+        <CenterPane 
+          layoutState={layoutState}
+          onStateChange={setLayoutState}
+        />
       </div>
     )
   }

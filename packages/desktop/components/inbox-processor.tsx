@@ -25,7 +25,7 @@ interface InboxNoteState {
 
 export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorProps) {
   // Use ideas from DataContext directly instead of local state
-  const currentIndex = layoutState.inboxCurrentIndex || 0
+  const currentIndex = layoutState.inboxCurrentIndex ?? 0
   const [loading, setLoading] = useState(true)
   const [transferPin, setTransferPin] = useState<string | null>(null)
   const [generatePinLoading, setGeneratePinLoading] = useState(false)
@@ -63,15 +63,13 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
     selectedConcepts: []
   })
 
-  // Load ideas on mount if needed
+  // Load ideas on mount
   useEffect(() => {
-    if (ideas.length === 0) {
-      loadInboxNotes()
-    }
+    loadInboxNotes()
   }, [])
 
-  // Get current note
-  const currentNote = ideas.length > 0 && currentIndex < ideas.length ? ideas[currentIndex] : null
+  // Get current note - handle empty inbox case
+  const currentNote = ideas.length > 0 && currentIndex >= 0 && currentIndex < ideas.length ? ideas[currentIndex] : null
   
   // Update note state when current idea changes
   useEffect(() => {
@@ -185,11 +183,7 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
       setLoading(true)
       await loadIdeas() // DataContext will update the ideas state
       console.log('📥 Loaded ideas via DataContext')
-      
-      if (ideas.length === 0) {
-        console.log('📥 No ideas in inbox')
-        onStateChange({ selectedNote: null, selectedConcept: null, view: 'notes', inboxCount: 0 })
-      }
+      setLoading(false)
     } catch (error) {
       console.error('❌ Error loading inbox notes:', error)
       setLoading(false)
@@ -466,17 +460,19 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
   if (ideas.length === 0) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center max-w-md">
+          <div className="text-xl font-medium text-muted-foreground mb-2">📥</div>
           <div className="text-lg font-medium">Inbox is empty</div>
-          <div className="text-sm text-muted-foreground mt-2">All ideas have been processed</div>
-          <Button 
-            variant="outline" 
-            className="mt-4"
-            onClick={() => onStateChange({ selectedNote: null, selectedConcept: null, view: 'notes' })}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Notes
-          </Button>
+          <div className="text-sm text-muted-foreground mt-2 mb-6">All ideas have been processed! Click the + button in the sidebar to add new ideas.</div>
+          <div className="flex gap-2 justify-center">
+            <Button 
+              variant="outline" 
+              onClick={() => onStateChange({ selectedNote: null, selectedConcept: null, view: 'notes', inboxCount: 0 })}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Notes
+            </Button>
+          </div>
         </div>
       </div>
     )

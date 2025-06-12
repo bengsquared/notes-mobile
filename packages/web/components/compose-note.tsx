@@ -34,12 +34,6 @@ export default function ComposeNote({ onNoteCreated, editingNote, onEditComplete
     // Check if geolocation is available
     if (!navigator.geolocation) {
       setLocationState("unavailable")
-      return
-    }
-
-    // Try to get location automatically on first load (only for new notes)
-    if (!editingNote) {
-      requestLocation()
     }
   }, [])
 

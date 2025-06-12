@@ -17,6 +17,11 @@ export class IPCHandlers {
     this.registerHandlers()
   }
 
+  // Method to update the storage reference when directory changes
+  updateStorage(newStorage: NotesStorage) {
+    this.storage = newStorage
+  }
+
   private registerHandlers() {
     // ============================================================================
     // IDEAS (Draft thoughts, unprocessed)

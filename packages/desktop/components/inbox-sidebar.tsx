@@ -52,19 +52,26 @@ export function InboxSidebar({ inboxNotes, currentIndex, onJumpToNote, onRefresh
       
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          {inboxNotes.map((note, index) => (
-            <Button
-              key={note.filename}
-              variant={index === currentIndex ? 'secondary' : 'ghost'}
-              className="w-full justify-start text-sm h-auto py-1 overflow-hidden"
-              onClick={() => onJumpToNote(index)}
-            >
-              <FileText className="mr-2 h-3 w-3 flex-shrink-0" />
-              <span className="truncate text-left flex-1 min-w-0">
-                {getDisplayTitle(note.metadata.title, note.content, note.filename)}
-              </span>
-            </Button>
-          ))}
+          {inboxNotes.length === 0 ? (
+            <div className="text-center text-muted-foreground text-sm p-4">
+              <div className="mb-2">No items in inbox</div>
+              <div className="text-xs opacity-60">Click + to add a new idea</div>
+            </div>
+          ) : (
+            inboxNotes.map((note, index) => (
+              <Button
+                key={note.filename}
+                variant={index === currentIndex ? 'secondary' : 'ghost'}
+                className="w-full justify-start text-sm h-auto py-1 overflow-hidden"
+                onClick={() => onJumpToNote(index)}
+              >
+                <FileText className="mr-2 h-3 w-3 flex-shrink-0" />
+                <span className="truncate text-left flex-1 min-w-0">
+                  {getDisplayTitle(note.metadata.title, note.content, note.filename)}
+                </span>
+              </Button>
+            ))
+          )}
         </div>
       </ScrollArea>
     </div>

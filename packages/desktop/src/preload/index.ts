@@ -110,6 +110,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getConfig: () => ipcRenderer.invoke('getStorageConfig'),
     generateMCPConfig: () => ipcRenderer.invoke('generateMCPConfig')
   },
+  
+  // Additional APIs needed by settings
+  getStorageConfig: () => ipcRenderer.invoke('getStorageConfig'),
+  generateMCPConfig: () => ipcRenderer.invoke('generateMCPConfig'),
+  selectNotesDirectory: () => ipcRenderer.invoke('select-notes-directory'),
+  restartApp: () => ipcRenderer.invoke('restart-app'),
 
   transfer: {
     onNotesReceived: (callback: (notes: any[]) => void) => {

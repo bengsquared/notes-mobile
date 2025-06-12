@@ -18,9 +18,11 @@ interface SettingsPageProps {
 
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const [storageConfig, setStorageConfig] = useState<StorageConfig | null>(null)
+  const [originalDirectory, setOriginalDirectory] = useState<string | null>(null)
   const [apiToken, setApiToken] = useState('')
   const [embeddingsProvider, setEmbeddingsProvider] = useState('openai')
   const [loading, setLoading] = useState(true)
+  const [showRestartPrompt, setShowRestartPrompt] = useState(false)
 
   useEffect(() => {
     loadSettings()
@@ -28,8 +30,15 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
   const loadSettings = async () => {
     try {
+      console.log('Settings: Loading settings...')
       const config = await window.electronAPI.getStorageConfig()
+      console.log('Settings: Loaded config:', config)
       setStorageConfig(config)
+      
+      // Store the original directory to detect changes
+      if (!originalDirectory && config.notesDirectory) {
+        setOriginalDirectory(config.notesDirectory)
+      }
       
       // TODO: Load API token and other settings from electron-store
       // const settings = await window.electronAPI.getAppSettings()
@@ -38,20 +47,36 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       
       setLoading(false)
     } catch (error) {
-      console.error('Error loading settings:', error)
+      console.error('Settings: Error loading settings:', error)
+      console.error('Settings: Error details:', error.message, error.stack)
       setLoading(false)
     }
   }
 
   const selectNotesDirectory = async () => {
     try {
+      console.log('Settings: Calling selectNotesDirectory...')
       const selectedPath = await window.electronAPI.selectNotesDirectory()
+      console.log('Settings: selectNotesDirectory returned:', selectedPath)
+      
       if (selectedPath) {
-        // Reload storage config
+        console.log('Settings: Directory selected, reloading settings...')
+        // Reload storage config to get the updated directory
         await loadSettings()
+        console.log('Settings: Settings reloaded')
+        
+        // Check immediately if directory changed to show restart prompt
+        const currentDirectory = storageConfig?.notesDirectory
+        if (originalDirectory && selectedPath !== originalDirectory) {
+          console.log('Settings: Directory changed from', originalDirectory, 'to', selectedPath)
+          // Settings will be updated by loadSettings, then handleBack will detect the change
+        }
+      } else {
+        console.log('Settings: No directory selected (cancelled or null)')
       }
     } catch (error) {
-      console.error('Error selecting notes directory:', error)
+      console.error('Settings: Error selecting notes directory:', error)
+      console.error('Settings: Error details:', error.message, error.stack)
     }
   }
 
@@ -68,6 +93,37 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     }
   }
 
+  const handleBack = () => {
+    // Check if directory was changed
+    const currentDirectory = storageConfig?.notesDirectory
+    const directoryChanged = originalDirectory !== currentDirectory
+    
+    console.log('Settings: Checking for directory change:')
+    console.log('  Original:', originalDirectory)
+    console.log('  Current:', currentDirectory)
+    console.log('  Changed:', directoryChanged)
+    
+    if (directoryChanged && currentDirectory) {
+      // Directory was changed - show restart prompt
+      console.log('Settings: Directory changed, showing restart prompt...')
+      setShowRestartPrompt(true)
+    } else {
+      // No directory change - normal back navigation
+      onBack()
+    }
+  }
+  
+  const handleRestartNow = () => {
+    console.log('Settings: User chose to restart now')
+    window.electronAPI?.restartApp?.()
+  }
+  
+  const handleRestartLater = () => {
+    console.log('Settings: User chose to restart later')
+    setShowRestartPrompt(false)
+    onBack()
+  }
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -80,7 +136,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
     <div className="h-full flex flex-col">
       {/* Header - Fixed */}
       <div className="border-b p-4 flex items-center flex-shrink-0">
-        <Button variant="ghost" size="sm" onClick={onBack}>
+        <Button variant="ghost" size="sm" onClick={handleBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
@@ -112,8 +168,11 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
                     <Label htmlFor="notes-directory">Current Directory</Label>
-                    <div className="mt-1 p-2 bg-muted rounded text-sm font-mono">
+                    <div className="mt-1 p-2 bg-muted rounded text-sm font-mono relative">
                       {storageConfig?.notesDirectory || 'Not configured'}
+                      {originalDirectory !== storageConfig?.notesDirectory && storageConfig?.notesDirectory && (
+                        <div className="absolute -top-2 -right-2 w-3 h-3 bg-orange-500 rounded-full animate-pulse" title="Directory changed - restart required" />
+                      )}
                     </div>
                   </div>
                   <Button variant="outline" onClick={selectNotesDirectory}>
@@ -121,6 +180,12 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
                     Change Directory
                   </Button>
                 </div>
+                
+                {originalDirectory !== storageConfig?.notesDirectory && storageConfig?.notesDirectory && (
+                  <div className="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded p-2">
+                    <strong>Directory changed!</strong> The app will need to restart to load data from the new location.
+                  </div>
+                )}
                 
                 <div className="text-xs text-muted-foreground">
                   <p>
@@ -242,6 +307,47 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
 
         </div>
       </div>
+      
+      {/* Restart Prompt Dialog */}
+      {showRestartPrompt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background border rounded-lg p-6 max-w-md mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center mr-3">
+                <Settings className="h-4 w-4 text-orange-600" />
+              </div>
+              <h3 className="text-lg font-semibold">Directory Changed</h3>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-sm text-muted-foreground mb-2">
+                You've changed the notes directory. To ensure all data loads correctly from the new location, 
+                the app needs to restart.
+              </p>
+              <div className="text-xs text-muted-foreground bg-muted p-2 rounded">
+                <strong>From:</strong> {originalDirectory}<br/>
+                <strong>To:</strong> {storageConfig?.notesDirectory}
+              </div>
+            </div>
+            
+            <div className="flex gap-3 justify-end">
+              <Button 
+                variant="outline" 
+                onClick={handleRestartLater}
+                className="flex-1"
+              >
+                Restart Later
+              </Button>
+              <Button 
+                onClick={handleRestartNow}
+                className="flex-1"
+              >
+                Restart Now
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

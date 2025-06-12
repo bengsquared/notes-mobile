@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
 import path from 'path';
 import { createServer } from 'http';
 import Store from 'electron-store';
@@ -29,7 +29,7 @@ const logger = {
 };
 
 // Disable sandbox in development mode (only when not in MCP mode)
-const isDev = process.env.NODE_ENV !== 'production';
+const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
 if (isDev && !isMCPMode) {
   app.commandLine.appendSwitch('--no-sandbox');
   logger.log('Development mode: Sandbox disabled');
@@ -42,6 +42,7 @@ let mainWindow: typeof BrowserWindow.prototype | null = null;
 let currentPIN: string | null = null;
 let pinExpiryTimeout: NodeJS.Timeout | null = null;
 let storage: NotesStorage | null = null;
+let ipcHandlers: IPCHandlers | null = null;
 let mcpServer: NotesMCPServer | null = null;
 let bonjour: any = null;
 let rpcServer: any = null;
@@ -61,6 +62,7 @@ async function createWindow() {
     width: 1200,
     height: 800,
     icon: join(__dirname, '../../resources/logo.png'),
+    show: false, // Don't show until ready
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -68,18 +70,146 @@ async function createWindow() {
     }
   });
 
-  // In development, Vite will provide the dev server
-  const isDev = process.env.NODE_ENV !== 'production';
-  if (isDev) {
+  // Use app.isPackaged to determine if we're in production
+  const isPackaged = app.isPackaged;
+  
+  if (!isPackaged && process.env.NODE_ENV !== 'production') {
+    // Development mode - use Vite dev server
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
+    // Show immediately in dev mode
+    mainWindow.show();
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    // Production mode - load from built files
+    const rendererPath = join(__dirname, '../renderer/index.html');
+    logger.log('Loading renderer from path:', rendererPath);
+    logger.log('App is packaged:', isPackaged);
+    logger.log('__dirname:', __dirname);
+    
+    mainWindow.loadFile(rendererPath);
+    
+    // Disable dev tools in production
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+        event.preventDefault();
+      }
+      if (input.key === 'F12') {
+        event.preventDefault();
+      }
+    });
+    
+    // Debug: Log when page finishes loading
+    mainWindow.webContents.once('did-finish-load', () => {
+      logger.log('Renderer process finished loading');
+      // Show window once content is loaded
+      mainWindow?.show();
+    });
+    
+    // Debug: Log any errors
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      logger.error('Failed to load renderer:', errorCode, errorDescription);
+    });
+    
+    // Ensure dev tools are closed
+    mainWindow.webContents.on('devtools-opened', () => {
+      if (isPackaged && mainWindow) {
+        mainWindow.webContents.closeDevTools();
+      }
+    });
   }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+// Set up application menu with option to create new windows
+function setupApplicationMenu() {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: app.getName(),
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            createWindow();
+          }
+        },
+        { type: 'separator' },
+        { role: 'close' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        { role: 'front' }
+      ]
+    }
+  ];
+
+  if (isMCPMode) {
+    // Add MCP-specific menu items
+    template.splice(1, 0, {
+      label: 'MCP',
+      submenu: [
+        {
+          label: 'MCP Server Status',
+          enabled: false
+        },
+        {
+          label: 'Running in background',
+          enabled: false
+        }
+      ]
+    });
+  }
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 // Generate a 6-digit PIN
@@ -347,8 +477,11 @@ function setupRPCServer() {
     }
   });
 
-  rpcServer.listen(8080, '0.0.0.0', () => {
-    logger.log(`🚀 RPC server listening on ${localIP}:8080`);
+  // Use different ports for dev/prod to avoid conflicts
+  const rpcPort = isDev ? 8081 : 8080;
+  
+  rpcServer.listen(rpcPort, '0.0.0.0', () => {
+    logger.log(`🚀 RPC server listening on ${localIP}:${rpcPort}`);
     logger.log(`🔑 Initial PIN state: ${currentPIN ? `Active (${currentPIN})` : 'None'}`);
     
     // Set up mDNS service advertisement
@@ -358,9 +491,9 @@ function setupRPCServer() {
     
     // Advertise the notes transfer service
     const service = bonjour.publish({
-      name: `Notes-${os.hostname()}`,
+      name: `Notes-${os.hostname()}${isDev ? '-dev' : ''}`,
       type: 'notes-transfer',
-      port: 8080,
+      port: rpcPort,
       txt: {
         version: '1.0.0',
         hostname: os.hostname(),
@@ -380,58 +513,76 @@ function setupRPCServer() {
   });
 }
 
-// Handle MCP mode vs normal Electron app mode
-if (isMCPMode) {
-  // In MCP mode, skip Electron initialization and run MCP server directly
-  initializeMCPServerStandalone().catch((error) => {
-    console.error('Failed to start MCP server:', error);
-    process.exit(1);
-  });
-} else {
-  // Normal Electron app mode
-  app.whenReady().then(async () => {
-    // Register essential IPC handlers first
-    registerTransferHandlers();
-    
-    await initializeStorage();
-    
+// Always run full Electron app, but skip initial window creation in MCP mode
+app.whenReady().then(async () => {
+  // Register essential IPC handlers first
+  registerTransferHandlers();
+  
+  // Set up application menu
+  setupApplicationMenu();
+  
+  // Create window immediately for faster startup (unless in MCP mode)
+  if (!isMCPMode) {
     createWindow();
-    setupRPCServer();
-  });
-}
-
-// Only register app event handlers when not in MCP mode
-if (!isMCPMode) {
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-      app.quit();
-    }
-  });
-
-  app.on('before-quit', () => {
-    // Clean up services
-    if (bonjour) {
-      bonjour.destroy();
-      bonjour = null;
-    }
+  } else {
+    logger.log('🔧 MCP mode: App started without window. Use File > New Window or click dock icon to open interface.');
     
-    if (rpcServer) {
-      rpcServer.close();
-      rpcServer = null;
+    // Set dock icon badge to indicate MCP mode
+    if (process.platform === 'darwin') {
+      app.dock?.setBadge('MCP');
     }
-    
-    if (pinExpiryTimeout) {
-      clearTimeout(pinExpiryTimeout);
-      pinExpiryTimeout = null;
-    }
+  }
+  
+  // Initialize storage and RPC server in background
+  Promise.all([
+    initializeStorage(),
+    setupRPCServer()
+  ]).catch(error => {
+    logger.error('Background initialization failed:', error);
   });
+});
 
-  app.on('activate', () => {
-    if (mainWindow === null) {
-      createWindow();
-    }
-  });
-}
+// Register app event handlers for both modes
+app.on('window-all-closed', () => {
+  // In MCP mode, keep the app running even when all windows are closed
+  // so the MCP server continues to function
+  if (process.platform !== 'darwin' && !isMCPMode) {
+    app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  // Clean up services
+  if (bonjour) {
+    bonjour.destroy();
+    bonjour = null;
+  }
+  
+  if (rpcServer) {
+    rpcServer.close();
+    rpcServer = null;
+  }
+  
+  if (pinExpiryTimeout) {
+    clearTimeout(pinExpiryTimeout);
+    pinExpiryTimeout = null;
+  }
+});
+
+app.on('activate', () => {
+  // Create window when clicking dock icon (both modes)
+  if (mainWindow === null) {
+    createWindow();
+  }
+});
+
+// Handle dock icon right-click in MCP mode
+app.on('browser-window-created', () => {
+  if (isMCPMode && process.platform === 'darwin') {
+    // Set dock icon badge to indicate MCP mode
+    app.dock?.setBadge('MCP');
+  }
+});
 
 // Initialize storage on startup
 async function initializeStorage() {
@@ -439,15 +590,39 @@ async function initializeStorage() {
   
   logger.log('🗄️ Initializing storage...');
   
-  // Initialize storage system with DeepNotes directory
-  const documentsPath = app.getPath('documents');
-  const notesDirectory = path.join(documentsPath, 'DeepNotes');
+  // Debug electron-store
+  logger.log('🗄️ Electron store path:', store.path);
+  logger.log('🗄️ Store contents:', store.store);
+  
+  // Get the stored directory - don't set default automatically
+  let notesDirectory = store.get('notesDirectory') as string | undefined;
+  logger.log('🗄️ Retrieved notesDirectory from store:', notesDirectory);
+  
+  if (!notesDirectory) {
+    // First time setup - will trigger folder selection in renderer
+    logger.log('🗄️ No directory configured - first time setup required');
+    return; // Don't initialize storage yet
+  }
+  
+  await initializeStorageWithDirectory(notesDirectory);
+}
+
+// Initialize storage with a specific directory
+async function initializeStorageWithDirectory(notesDirectory: string) {
+  const isMCPMode = process.env.ENABLE_MCP_SERVER === 'true' || process.argv.includes('--mcp');
+  
+  logger.log('🗄️ Using notes directory:', notesDirectory);
   
   storage = new NotesStorage(notesDirectory);
   await storage.initialize();
   
-  // Set up IPC handlers
-  new IPCHandlers(storage);
+  // Set up IPC handlers only if they don't exist yet
+  if (!ipcHandlers) {
+    ipcHandlers = new IPCHandlers(storage);
+  } else {
+    // Update existing handlers
+    ipcHandlers.updateStorage(storage);
+  }
   
   logger.log('🗄️ Storage initialized successfully');
   
@@ -479,40 +654,6 @@ async function initializeMCPServer() {
   }
 }
 
-// Initialize MCP server in standalone mode (without Electron app)
-async function initializeMCPServerStandalone() {
-  try {
-    // Silence console output in MCP mode to prevent JSON-RPC interference
-    const originalConsole = { ...console };
-    console.log = () => {};
-    console.warn = () => {};
-    console.error = (...args) => originalConsole.error(...args); // Keep errors for debugging
-    
-    // Initialize storage directly without app.getPath 
-    const os = require('os');
-    const documentsPath = path.join(os.homedir(), 'Documents');
-    const notesDirectory = path.join(documentsPath, 'DeepNotes');
-    
-    storage = new NotesStorage(notesDirectory);
-    await storage.initialize();
-    
-    // Initialize MCP server
-    mcpServer = new NotesMCPServer();
-    mcpServer.setNotesStorage(storage);
-    await mcpServer.start();
-    
-    console.error('Notes MCP Server started on stdio');
-    
-    // Keep process alive and handle cleanup
-    process.on('SIGINT', () => {
-      console.error('MCP Server shutting down...');
-      process.exit(0);
-    });
-    
-  } catch (error) {
-    throw new Error(`Failed to initialize standalone MCP server: ${error}`);
-  }
-}
 
 // Generate MCP configuration for Claude Desktop
 async function generateMCPConfig() {
@@ -549,38 +690,17 @@ async function generateMCPConfig() {
       };
     }
 
-    const configInstructions = `
-# Claude Desktop MCP Configuration for Notes App
-
-To add the Notes app to Claude Desktop, add this to your Claude Desktop configuration file:
-
-File location: ${configPath}
-
-Configuration to add:
-${JSON.stringify(mcpConfig, null, 2)}
-
-# Instructions:
-1. Open or create the Claude Desktop configuration file at the path above
-2. If the file exists, merge the "notes-app" entry into the existing "mcpServers" object
-3. If the file doesn't exist, create it with the full configuration above
-4. Restart Claude Desktop to load the new MCP server
-
-# Alternative: Copy this entire configuration to clipboard
-`;
-
-    // Save instructions to desktop
-    const desktopPath = app.getPath('desktop');
-    const instructionsPath = path.join(desktopPath, 'Notes-App-MCP-Setup.txt');
-    
-    await fs.writeFile(instructionsPath, configInstructions, 'utf8');
-    
-    logger.log(`MCP setup instructions saved to: ${instructionsPath}`);
-    
-    // Also try to update the Claude config directly if possible
-    await updateClaudeConfigIfPossible(configPath, mcpConfig);
+    // Return the configuration data for UI display
+    return {
+      configPath,
+      mcpConfig,
+      appPath,
+      isDev
+    };
     
   } catch (error) {
     logger.error('Error generating MCP config:', error);
+    throw error;
   }
 }
 
@@ -600,88 +720,172 @@ function getClaudeDesktopConfigPath(): string {
   }
 }
 
-async function updateClaudeConfigIfPossible(configPath: string, mcpConfig: any) {
-  try {
-    let existingConfig: any = {};
-    
-    // Try to read existing config
-    try {
-      const existingContent = await fs.readFile(configPath, 'utf8');
-      existingConfig = JSON.parse(existingContent);
-    } catch {
-      // File doesn't exist or is invalid, start fresh
-      existingConfig = { mcpServers: {} };
-    }
-    
-    // Ensure mcpServers exists
-    if (!existingConfig.mcpServers) {
-      existingConfig.mcpServers = {};
-    }
-    
-    // Add or update our server
-    existingConfig.mcpServers['notes-app'] = mcpConfig.mcpServers['notes-app'];
-    
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(configPath), { recursive: true });
-    
-    // Write updated config
-    await fs.writeFile(configPath, JSON.stringify(existingConfig, null, 2), 'utf8');
-    
-    logger.log('Successfully updated Claude Desktop configuration');
-    
-  } catch (error) {
-    logger.log('Could not automatically update Claude config (this is normal):', error.message);
-  }
-}
 
 // Storage directory handlers (only in normal Electron mode)
 if (!isMCPMode) {
   ipcMain.handle('get-storage-config', () => {
     const notesDirectory = store.get('notesDirectory') as string | undefined;
+    logger.log('IPC: get-storage-config called, returning:', {
+      notesDirectory,
+      initialized: !!notesDirectory && !!storage
+    });
     return {
       notesDirectory: notesDirectory || null,
-      initialized: !!notesDirectory
+      initialized: !!notesDirectory && !!storage
     };
   });
 
-  ipcMain.handle('generate-mcp-config', async () => {
-    await generateMCPConfig();
-    return true;
-  });
 
   ipcMain.handle('select-notes-directory', async () => {
-    logger.log("here")
     logger.log('Main: select-notes-directory called');
-    logger.log('Main: Platform:', process.platform);
-    logger.log('Main: Electron version:', process.versions.electron);
+    logger.log('Main: mainWindow exists?', !!mainWindow);
+    logger.log('Main: mainWindow focused?', mainWindow?.isFocused());
+    logger.log('Main: mainWindow visible?', mainWindow?.isVisible());
     
     try {
-      // First, try to access the file system to trigger permissions
-      const homePath = app.getPath('home');
-      logger.log('Main: Home path:', homePath);
-      
-      try {
-        // List home directory to trigger file access permission
-        const homeContents = await fs.readdir(homePath);
-        logger.log('Main: Successfully read home directory, found', homeContents.length, 'items');
-        
-        // Also try Documents folder
-        const documentsPath = app.getPath('documents');
-        await fs.access(documentsPath);
-        logger.log('Main: Documents folder accessible at:', documentsPath);
-      } catch (fsError) {
-        logger.error('Main: File system access error:', fsError);
-        logger.log('Main: This might trigger macOS permission dialog...');
+      // Check permissions on macOS
+      if (process.platform === 'darwin') {
+        logger.log('Main: Checking macOS permissions...');
+        try {
+          // Try to read the documents directory to trigger permission prompt
+          const docsPath = app.getPath('documents');
+          await fs.access(docsPath);
+          const docContents = await fs.readdir(docsPath);
+          logger.log('Main: Successfully read documents directory, found', docContents.length, 'items');
+        } catch (permError) {
+          logger.error('Main: Permissions error:', permError);
+        }
       }
-    
       
-      // For now, just use the fixed DeepNotes directory
-      const defaultPath = path.join(app.getPath('documents'), 'DeepNotes');
-      logger.log('Main: Using default DeepNotes directory:', defaultPath);
+      // Ensure window is focused before showing dialog
+      if (mainWindow && !mainWindow.isFocused()) {
+        logger.log('Main: Focusing window before dialog...');
+        mainWindow.focus();
+        // Small delay to ensure focus is complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
       
-      return defaultPath;
+      logger.log('Main: About to show dialog...');
+      logger.log('Main: Current documents path:', app.getPath('documents'));
+      
+      // Show directory picker dialog - use both openFile and openDirectory for macOS compatibility
+      const dialogOptions: Electron.OpenDialogOptions = {
+        title: 'Select Notes Directory',
+        defaultPath: app.getPath('documents'),
+        // Include both openFile and openDirectory to work around macOS Electron bug
+        properties: process.platform === 'darwin' ? ['openFile', 'openDirectory'] : ['openDirectory'],
+        message: 'Choose a directory for storing your notes'
+      };
+      
+      logger.log('Main: Dialog options:', JSON.stringify(dialogOptions));
+      logger.log('Main: Process platform:', process.platform);
+      
+      let result;
+      try {
+        logger.log('Main: Showing directory selection dialog...');
+        result = await dialog.showOpenDialog(mainWindow!, dialogOptions);
+      } catch (dialogError) {
+        logger.error('Main: Error showing dialog:', dialogError);
+        // Fallback: try without any parent
+        result = await dialog.showOpenDialog(dialogOptions);
+      }
+      
+      logger.log('Main: Dialog result:', JSON.stringify(result));
+      logger.log('Main: Dialog canceled?', result.canceled);
+      logger.log('Main: File paths:', result.filePaths);
+      logger.log('Main: File paths length:', result.filePaths?.length);
+      
+      if (result.canceled) {
+        logger.log('Main: User explicitly cancelled the dialog');
+        return null;
+      }
+      
+      if (!result.filePaths || result.filePaths.length === 0) {
+        logger.log('Main: No paths returned from dialog, trying alternative approach...');
+        
+        logger.log('Main: No paths returned from dialog - this appears to be a macOS Electron bug');
+        logger.log('Main: Trying workaround with mixed file/directory selection...');
+        
+        // Alternative approach: force both openFile and openDirectory for macOS
+        const altDialogOptions: Electron.OpenDialogOptions = {
+          title: 'Choose Notes Directory (Select any file in the directory you want)',
+          defaultPath: app.getPath('documents'),
+          properties: ['openFile', 'openDirectory'],
+          message: 'You can select either a directory or any file within the directory you want to use'
+        };
+        
+        logger.log('Main: Trying alternative dialog options:', JSON.stringify(altDialogOptions));
+        
+        try {
+          const altResult = await dialog.showOpenDialog(altDialogOptions);
+          logger.log('Main: Alternative dialog result:', JSON.stringify(altResult));
+          
+          if (!altResult.canceled && altResult.filePaths && altResult.filePaths.length > 0) {
+            result = altResult;
+          } else {
+            logger.log('Main: Alternative dialog also failed, returning null');
+            return null;
+          }
+        } catch (altError) {
+          logger.error('Main: Alternative dialog error:', altError);
+          return null;
+        }
+      }
+      
+      let selectedPath = result.filePaths[0];
+      logger.log('Main: Path selected:', selectedPath);
+      
+      // Check if the selected path is a file or directory
+      try {
+        const stats = await fs.stat(selectedPath);
+        if (stats.isFile()) {
+          // If a file was selected, use its parent directory
+          selectedPath = path.dirname(selectedPath);
+          logger.log('Main: File selected, using parent directory:', selectedPath);
+        } else if (stats.isDirectory()) {
+          logger.log('Main: Directory selected:', selectedPath);
+        } else {
+          logger.log('Main: Selected path is neither file nor directory');
+          return null;
+        }
+      } catch (statError) {
+        logger.error('Main: Error checking path type:', statError);
+        return null;
+      }
+      
+      logger.log('Main: Final directory path:', selectedPath);
+      logger.log('Main: Path exists?', await fs.access(selectedPath).then(() => true).catch(() => false));
+      
+      // Store the selected directory
+      logger.log('Main: Storing directory in electron-store...');
+      const wasFirstTime = !store.get('notesDirectory');
+      
+      // Store the directory
+      store.set('notesDirectory', selectedPath);
+      
+      // Force save the store to disk
+      store.store = { ...store.store, notesDirectory: selectedPath };
+      
+      // Verify storage
+      const stored = store.get('notesDirectory');
+      logger.log('Main: Directory stored and verified:', stored);
+      logger.log('Main: Store file path:', store.path);
+      
+      if (wasFirstTime) {
+        logger.log('Main: First time setup - initializing storage...');
+        // Initialize storage for the first time
+        await initializeStorageWithDirectory(selectedPath);
+      } else {
+        logger.log('Main: Directory changed - stored but not applying until restart');
+        // Directory change will be applied on next app start
+        // User will be prompted to restart from the settings UI
+      }
+      
+      logger.log('Main: Returning selected path:', selectedPath);
+      return selectedPath;
     } catch (error) {
       logger.error('Main: Dialog error:', error);
+      logger.error('Main: Error stack:', error.stack);
       return null;
     }
   });
@@ -720,8 +924,15 @@ function registerTransferHandlers() {
 // Additional IPC handlers (only in normal Electron mode)
 if (!isMCPMode) {
   ipcMain.handle('getStorageConfig', () => {
+    const notesDirectory = store.get('notesDirectory') as string | undefined;
+    logger.log('IPC: getStorageConfig called, returning:', {
+      notesDirectory,
+      initialized: !!notesDirectory,
+      storageInitialized: !!storage
+    });
     return {
-      notesDirectory: app.getPath('documents') + '/DeepNotes',
+      notesDirectory: notesDirectory || null,
+      initialized: !!notesDirectory && !!storage,
       backupEnabled: store.get('backup.enabled', false),
       indexingEnabled: store.get('indexing.enabled', true)
     };
@@ -729,30 +940,17 @@ if (!isMCPMode) {
 
   ipcMain.handle('generateMCPConfig', async () => {
     try {
-      const documentsPath = app.getPath('documents');
-      const configPath = path.join(documentsPath, 'claude_desktop_config.json');
-      
-      const config = {
-        mcpServers: {
-          "notes-app": {
-            command: process.execPath,
-            args: [
-              path.join(__dirname, '../../main/index.js'),
-              '--mcp'
-            ],
-            env: {
-              ENABLE_MCP_SERVER: 'true'
-            }
-          }
-        }
-      };
-      
-      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-      logger.log(`MCP config written to: ${configPath}`);
-      return true;
+      const configData = await generateMCPConfig();
+      return configData;
     } catch (error) {
       logger.error('Failed to generate MCP config:', error);
-      return false;
+      throw error;
     }
+  });
+
+  ipcMain.handle('restart-app', () => {
+    logger.log('🔄 App restart requested');
+    app.relaunch();
+    app.exit();
   });
 }
