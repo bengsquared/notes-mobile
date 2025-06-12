@@ -87,6 +87,7 @@
     "appId": "com.notes.desktop",
     "productName": "Notes Desktop",
     "electronVersion": "36.3.1",
+    "icon": "resources/logo.png",
     "directories": {
       "output": "dist/electron"
     },
@@ -96,6 +97,7 @@
       "package.json"
     ],
     "mac": {
+      "icon": "resources/icon.icns",
       "category": "public.app-category.productivity",
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
@@ -103,9 +105,11 @@
       "gatekeeperAssess": false
     },
     "win": {
+      "icon": "resources/logo.png",
       "target": "nsis"
     },
     "linux": {
+      "icon": "resources/logo.png",
       "target": "AppImage"
     }
   }
