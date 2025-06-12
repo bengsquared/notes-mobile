@@ -55,6 +55,21 @@ export default function ComposeNote({ onNoteCreated, editingNote, onEditComplete
     }
   }, [editingNote])
 
+  // Auto-save on unmount if changes exist
+  useEffect(() => {
+    return () => {
+      if (editingNote && text.trim() && (text !== editingNote.text || attachments.length !== editingNote.attachments.length)) {
+        const updatedNote: Note = {
+          ...editingNote,
+          text: text.trim(),
+          attachments,
+          location,
+        }
+        updateNote(updatedNote)
+      }
+    }
+  }, []) // Only on unmount
+
   const requestLocation = () => {
     if (!navigator.geolocation) {
       setLocationState("unavailable")

@@ -1,0 +1,40 @@
+---
+title: Evolution of Knowledge Management
+concepts: [knowledge-management, digital-tools, PKM]
+links: [productivity-systems.txt]
+created: 2025-06-05T19:00:00Z
+modified: 2025-06-06T18:10:15.107Z
+---
+
+# Evolution of Knowledge Management
+
+The field of personal knowledge management (#PKM) has evolved significantly over the past decade. We've moved from simple note-taking apps to sophisticated systems that understand relationships and context.
+
+## Historical Progression
+
+1. **File-based systems** - Folders and documents
+2. **Database approaches** - Structured data with tags
+3. **Graph-based systems** - Bidirectional linking (Roam, Obsidian)
+4. **AI-enhanced systems** - Semantic understanding and automated connections
+
+## Current Trends
+
+- **Local-first** - Users want ownership of their data
+- **Plain text** - Future-proof formats that work everywhere
+- **Ambient intelligence** - Systems that help without getting in the way
+
+The key insight is that the best systems amplify human thinking rather than replacing it. They should make connections visible without forcing artificial structure.
+
+This relates strongly to @productivity-systems and the importance of #systems-thinking in designing tools for thought.
+
+analyze_note_content function feels redundant - the system already extracts concepts and links automatically when reading notes (evident from the metadata in list_all_notes). 
+
+Two options:
+1. Remove it entirely - the automatic parsing during note creation/update seems sufficient
+2. Enhance it to be a "preview" function - let users test how content would be parsed before saving, useful for debugging or understanding the system
+
+Current workflow seems to be: write note → system auto-extracts concepts/links → stored in metadata. The analyze function doesn't fit this flow naturally.
+
+Maybe replace with a "preview_parsing" function that shows what concepts/links would be extracted from draft content? Could be helpful for users learning the syntax.
+
+#system-design #api-design #user-experience

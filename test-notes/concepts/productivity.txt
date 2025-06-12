@@ -1,0 +1,14 @@
+---
+linkedNotes: [productivity-systems.txt]
+relatedConcepts: [systems-thinking, workflow]
+created: 2025-06-05T21:00:00Z
+modified: 2025-06-05T21:00:00Z
+---
+
+Productivity encompasses the methods, systems, and practices used to accomplish tasks efficiently and effectively. In the context of personal knowledge management, productivity is less about speed and more about creating sustainable workflows that support deep thinking and meaningful work.
+
+Key aspects:
+- Capture systems that reduce cognitive load
+- Processing workflows that maintain momentum
+- Review cycles that ensure nothing important is lost
+- Integration between thinking and doing

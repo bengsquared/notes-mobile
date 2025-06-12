@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "notes-app": {
+      "command": "/Users/ben/Documents/notes-mobile/node_modules/.bin/electron",
+      "args": [
+        "/Users/ben/Documents/notes-mobile/packages/desktop/out/main/index.js",
+        "--mcp"
+      ]
+    }
+  }
+}

@@ -1,13 +1,26 @@
 {
   "name": "@notes-app/shared",
   "version": "0.1.0",
+  "type": "module",
   "main": "dist/index.js",
+  "module": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "scripts": {
-    "build": "npx -y typescript@5 tsc",
-    "dev": "npx -y typescript@5 tsc --watch"
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0"
+    "typescript": "^5.8.3",
+    "@types/react": "^18.0.0"
   }
 }

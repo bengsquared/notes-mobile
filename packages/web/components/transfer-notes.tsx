@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
-import { Send, Download, Wifi, Shield, CheckCircle, XCircle, Loader2, Copy, Smartphone, Monitor } from "lucide-react"
-import { getAllNotes, importNotes, type Note } from "@/lib/notes-storage"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Send, Download, Wifi, Shield, CheckCircle, XCircle, Loader2, Copy, Smartphone, Monitor, RefreshCw } from "lucide-react"
+import { getAllNotes, importNotes, deleteAllNotes, type Note } from "@/lib/notes-storage"
 import QRCodeGenerator from "@/components/qr-code"
 import ExportNotes from "@/components/export-notes"
 
@@ -20,11 +21,15 @@ interface TransferData {
   deviceName: string
 }
 
-// Component for transferring to desktop
+// Component for transferring to desktop via WebRTC
 function TransferToDesktop() {
-  const [status, setStatus] = useState<'idle' | 'checking' | 'sending' | 'success' | 'error'>('idle')
+  const [status, setStatus] = useState<'idle' | 'awaiting-code' | 'connecting' | 'connected' | 'transferring' | 'success' | 'error'>('idle')
   const [error, setError] = useState('')
   const [transferInfo, setTransferInfo] = useState<{ count: number; size: string } | null>(null)
+  const [inputCode, setInputCode] = useState('')
+  const [deleteAfterTransfer, setDeleteAfterTransfer] = useState(false)
+  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null)
+  const [dataChannel, setDataChannel] = useState<RTCDataChannel | null>(null)
 
   // Calculate total size of notes data
   const calculateDesktopDataSize = (notes: any[]) => {
@@ -35,68 +40,144 @@ function TransferToDesktop() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const checkDesktopConnection = async () => {
-    try {
-      const response = await fetch('http://localhost:8080/rpc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', method: 'ping', params: {}, id: 1 })
-      })
-      return response.ok
-    } catch {
-      return false
+  // Initialize WebRTC peer connection as client
+  const initializePeerConnection = () => {
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" }
+      ]
+    })
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE connection state:", pc.iceConnectionState)
+      if (pc.iceConnectionState === "connected") {
+        setStatus("connected")
+      } else if (pc.iceConnectionState === "failed") {
+        setStatus("error")
+        setError("Connection failed. Please try again.")
+      }
     }
+
+    return pc
   }
 
-  const transferToDesktop = async () => {
-    setStatus('checking')
+  // Start the transfer process - show code input
+  const startTransfer = async () => {
+    setStatus('awaiting-code')
     setError('')
-    
-    // Check if desktop app is running
-    const isConnected = await checkDesktopConnection()
-    if (!isConnected) {
-      setStatus('error')
-      setError('Desktop app not detected. Make sure Notes Desktop is running.')
+  }
+
+  // Connect to desktop using the entered code
+  const connectWithCode = async () => {
+    if (!inputCode || inputCode.length !== 6) {
+      setError('Please enter a valid 6-character code')
       return
     }
 
-    setStatus('sending')
-    
+    setStatus('connecting')
+    setError('')
+
     try {
-      const webNotes = getAllNotes()
+      // Test connection AND validate the PIN by sending an empty notes array
+      const testResponse = await fetch('http://localhost:8080/rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'transferNotesWithCode',
+          params: { 
+            code: inputCode,
+            notes: [] // Empty array to test PIN without transferring
+          },
+          id: Date.now()
+        })
+      })
+
+      if (!testResponse.ok) {
+        const errorData = await testResponse.json()
+        if (testResponse.status === 401) {
+          throw new Error('Invalid or expired connection code')
+        }
+        throw new Error('Cannot connect to desktop app')
+      }
+
+      // If connection successful, show ready state
+      setStatus('connected')
+      
+    } catch (err) {
+      setStatus('error')
+      setError(err instanceof Error ? err.message : 'Failed to connect to desktop. Make sure it\'s running and try again.')
+      console.error(err)
+    }
+  }
+
+  // Send notes through direct HTTP transfer
+  const sendNotes = async () => {
+    try {
+      setStatus('transferring')
+
+      const notes = getAllNotes()
       
       // Convert web notes format to desktop format
-      const notes = webNotes.map(note => ({
+      const formattedNotes = notes.map(note => ({
         id: note.id,
-        content: note.text, // Map 'text' to 'content'
+        content: note.text,
         createdAt: note.createdAt,
-        updatedAt: note.createdAt, // Use createdAt as updatedAt since web doesn't track updates
-        // Note: attachments and location are ignored for now in desktop
+        updatedAt: note.createdAt,
+        location: note.location, // Include location data if available
       }))
-      
-      const dataSize = calculateDesktopDataSize(notes)
-      
+
       const response = await fetch('http://localhost:8080/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jsonrpc: '2.0',
-          method: 'transferNotes',
-          params: { notes },
+          method: 'transferNotesWithCode',
+          params: { 
+            code: inputCode,
+            notes: formattedNotes 
+          },
           id: Date.now()
         })
       })
 
-      if (response.ok) {
-        setStatus('success')
-        setTransferInfo({ count: notes.length, size: dataSize })
-      } else {
-        throw new Error('Transfer failed')
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error?.message || 'Transfer failed')
       }
+
+      const result = await response.json()
+      
+      setTransferInfo({
+        count: formattedNotes.length,
+        size: calculateDesktopDataSize(formattedNotes)
+      })
+      setStatus('success')
+
+      // Delete notes if requested
+      if (deleteAfterTransfer) {
+        try {
+          await deleteAllNotes()
+        } catch (deleteError) {
+          console.error('Error deleting notes after transfer:', deleteError)
+          setError('Transfer successful, but failed to delete notes from this device.')
+        }
+      }
+
     } catch (err) {
       setStatus('error')
-      setError('Failed to transfer notes. Please try again.')
-      console.error('Transfer error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to send notes')
+      console.error(err)
+    }
+  }
+
+  const handleDeleteNotes = async () => {
+    try {
+      await deleteAllNotes()
+      alert('All notes have been deleted from this device.')
+    } catch (err) {
+      console.error('Error deleting notes:', err)
+      alert('Failed to delete notes. Please try again.')
     }
   }
 
@@ -104,42 +185,123 @@ function TransferToDesktop() {
     setStatus('idle')
     setError('')
     setTransferInfo(null)
+    setInputCode('')
+    setDeleteAfterTransfer(false)
   }
 
   if (status === 'idle') {
     return (
       <div className="space-y-4">
         <div className="bg-blue-50 p-3 rounded space-y-2 text-sm">
-          <p className="font-medium">Requirements:</p>
+          <p className="font-medium">Direct Transfer:</p>
           <ul className="list-disc list-inside space-y-1 text-gray-700">
-            <li>Notes Desktop app must be running</li>
-            <li>Desktop app automatically listens on port 8080</li>
-            <li>Both devices must be on the same network</li>
+            <li>Generate a connection code on your desktop app</li>
+            <li>Enter the code here to connect directly</li>
+            <li>Works on the same WiFi network</li>
+            <li>Secure code-based authentication</li>
           </ul>
         </div>
         
-        <Button onClick={transferToDesktop} className="w-full flex items-center gap-2">
+        <Button onClick={startTransfer} className="w-full flex items-center gap-2">
           <Send className="w-4 h-4" />
-          Transfer to Desktop
+          Connect to Desktop
         </Button>
       </div>
     )
   }
 
-  if (status === 'checking') {
+  if (status === 'awaiting-code') {
     return (
-      <div className="text-center space-y-3">
-        <Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-500" />
-        <p className="text-sm text-gray-600">Checking desktop connection...</p>
+      <div className="space-y-4">
+        <div className="text-center">
+          <Shield className="w-12 h-12 mx-auto text-blue-500 mb-3" />
+          <h3 className="font-medium">Enter Connection Code</h3>
+          <p className="text-sm text-gray-600 mt-2">
+            Generate a connection code on your desktop app and enter it here
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <Input
+            type="text"
+            placeholder="Enter 6-character code"
+            value={inputCode}
+            onChange={(e) => setInputCode(e.target.value.toUpperCase().slice(0, 6))}
+            className="text-center text-lg font-mono"
+            maxLength={6}
+          />
+
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="delete-after-transfer"
+              checked={deleteAfterTransfer}
+              onCheckedChange={(checked) => setDeleteAfterTransfer(checked === true)}
+            />
+            <label 
+              htmlFor="delete-after-transfer" 
+              className="text-sm text-gray-600 cursor-pointer"
+            >
+              Delete notes from this device after successful transfer
+            </label>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-600 text-center">{error}</p>
+          )}
+
+          <div className="flex gap-2">
+            <Button 
+              onClick={connectWithCode} 
+              disabled={inputCode.length !== 6}
+              className="flex-1"
+            >
+              Connect
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={resetTransfer}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       </div>
     )
   }
 
-  if (status === 'sending') {
+  if (status === 'connecting') {
     return (
       <div className="text-center space-y-3">
         <Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-500" />
-        <p className="text-sm text-gray-600">Sending notes to desktop...</p>
+        <p className="text-sm text-gray-600">Connecting to desktop...</p>
+      </div>
+    )
+  }
+
+  if (status === 'connected') {
+    return (
+      <div className="space-y-4">
+        <div className="text-center">
+          <CheckCircle className="w-12 h-12 mx-auto text-green-500 mb-3" />
+          <h3 className="font-medium text-green-700">Connected!</h3>
+          <p className="text-sm text-gray-600 mt-2">
+            Ready to transfer {getAllNotes().length} notes
+          </p>
+        </div>
+        
+        <Button onClick={sendNotes} className="w-full">
+          Transfer Notes
+        </Button>
+      </div>
+    )
+  }
+
+  if (status === 'transferring') {
+    return (
+      <div className="text-center space-y-3">
+        <Loader2 className="w-8 h-8 mx-auto animate-spin text-blue-500" />
+        <p className="text-sm text-gray-600">Transferring notes...</p>
       </div>
     )
   }
@@ -155,11 +317,31 @@ function TransferToDesktop() {
         <div className="bg-green-50 p-3 rounded space-y-1">
           <p className="text-sm"><strong>Notes transferred:</strong> {transferInfo.count}</p>
           <p className="text-sm"><strong>Total size:</strong> {transferInfo.size}</p>
+          {deleteAfterTransfer && (
+            <p className="text-sm text-green-600"><strong>✓ Notes deleted from this device</strong></p>
+          )}
         </div>
+
+        {error && (
+          <div className="bg-yellow-50 p-3 rounded">
+            <p className="text-sm text-yellow-800">{error}</p>
+          </div>
+        )}
         
-        <Button variant="outline" onClick={resetTransfer} className="w-full">
-          Transfer More Notes
-        </Button>
+        <div className="space-y-2">
+          {!deleteAfterTransfer && (
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteNotes} 
+              className="w-full"
+            >
+              Delete Notes from This Device
+            </Button>
+          )}
+          <Button variant="outline" onClick={resetTransfer} className="w-full">
+            Transfer More Notes
+          </Button>
+        </div>
       </div>
     )
   }
@@ -463,6 +645,23 @@ export default function TransferNotes() {
   if (mode === "idle") {
     return (
       <div className="space-y-4">
+        {/* Desktop Transfer Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Monitor className="w-5 h-5" />
+              Transfer to Desktop App
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Send all your notes directly to the Notes Desktop app running on your computer.
+            </p>
+            
+            <TransferToDesktop />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -491,23 +690,6 @@ export default function TransferNotes() {
               <Shield className="w-4 h-4" />
               <span>Transfers are encrypted and direct between devices</span>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Desktop Transfer Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Monitor className="w-5 h-5" />
-              Transfer to Desktop App
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Send all your notes directly to the Notes Desktop app running on your computer.
-            </p>
-            
-            <TransferToDesktop />
           </CardContent>
         </Card>
 
@@ -564,7 +746,7 @@ export default function TransferNotes() {
               </div>
 
               <p className="text-sm text-gray-600 text-center">
-                Scan the QR code or enter the connection code on the receiving device
+                Scan the QR code or enter this code in your desktop app to complete the transfer
               </p>
             </div>
           )}

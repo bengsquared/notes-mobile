@@ -73,3 +73,11 @@ pnpm dist     # Build and package for distribution
 - Web app entry: `packages/web/app/`
 - Shared types: `packages/shared/types/`
 - UI components: `packages/{web,desktop}/components/ui/`
+
+## Development Guidelines
+
+- Don't try to run the app. If you need to run it to inspect something, stop and ask the user to run it and provide you with feedback before proceeding.
+
+## Quick Reference
+
+- Whenever looking to build or use a script, check '/Users/ben/Documents/notes-mobile/package.json' to see available scripts

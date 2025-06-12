@@ -1,0 +1,6 @@
+---
+linkedNotes: [knowledge-management-evolution.txt]
+created: 2025-06-06T18:10:15.107Z
+modified: 2025-06-06T18:10:15.107Z
+---
+

@@ -12,6 +12,8 @@
     "build:web": "cd packages/web && pnpm run build",
     "build:desktop": "cd packages/desktop && pnpm run build",
     "build": "pnpm run build:shared && pnpm run build:web && pnpm run build:desktop",
+    "package:desktop": "pnpm run build:desktop && cd packages/desktop && pnpm run dist",
+    "package:desktop:all": "pnpm run build:desktop && cd packages/desktop && pnpm run dist:all",
     "postinstall": "echo 'Install complete'"
   },
   "devDependencies": {
