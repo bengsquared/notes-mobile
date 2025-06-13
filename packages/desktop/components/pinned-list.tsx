@@ -1,8 +1,6 @@
-'use client'
 
 import { useState, useEffect } from 'react'
 import { ScrollArea } from './ui/scroll-area'
-import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { EmptyState } from './ui/empty-state'
 import { PinnedListItem } from './pinned-list-item'
@@ -24,7 +22,7 @@ interface PinnedListProps {
   onConceptSelect: (conceptName: string) => void
 }
 
-export function PinnedList({ layoutState, onNoteSelect, onConceptSelect }: PinnedListProps) {
+export function PinnedList({ onNoteSelect, onConceptSelect }: PinnedListProps) {
   const [pinnedItems, setPinnedItems] = useState<PinnedItem[]>([])
   
   // Data from provider
@@ -44,7 +42,7 @@ export function PinnedList({ layoutState, onNoteSelect, onConceptSelect }: Pinne
           note.content.toLowerCase().includes(searchLower) ||
           note.metadata.concepts?.some(concept => 
             concept.toLowerCase().includes(searchLower)
-          )
+          ) || false
         )
       } else {
         const concept = item.data as Concept
@@ -120,10 +118,6 @@ export function PinnedList({ layoutState, onNoteSelect, onConceptSelect }: Pinne
     }
   }
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return ''
-    return new Date(dateString).toLocaleDateString()
-  }
 
   if (loading) {
     return (

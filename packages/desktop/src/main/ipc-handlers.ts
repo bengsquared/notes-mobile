@@ -10,9 +10,9 @@ import { NotesStorage, Idea } from '../lib/storage'
 import { Concept, Note } from '@notes-app/shared'
 
 export class IPCHandlers {
-  private storage: NotesStorage
+  private storage: NotesStorage | null
 
-  constructor(storage: NotesStorage) {
+  constructor(storage: NotesStorage | null) {
     this.storage = storage
     this.registerHandlers()
   }
@@ -22,58 +22,66 @@ export class IPCHandlers {
     this.storage = newStorage
   }
 
+  // Helper method to check if storage is available
+  private ensureStorage(): NotesStorage {
+    if (!this.storage) {
+      throw new Error('Storage not initialized. Please configure a notes directory first.')
+    }
+    return this.storage
+  }
+
   private registerHandlers() {
     // ============================================================================
     // IDEAS (Draft thoughts, unprocessed)
     // ============================================================================
 
     ipcMain.handle('ideas:list', async (): Promise<Idea[]> => {
-      return await this.storage.listIdeas()
+      return await this.ensureStorage().listIdeas()
     })
 
     ipcMain.handle('ideas:create', async (_, content: string, metadata?: any): Promise<Idea> => {
-      return await this.storage.createIdea(content, metadata)
+      return await this.ensureStorage().createIdea(content, metadata)
     })
 
     ipcMain.handle('ideas:load', async (_, filename: string): Promise<Idea> => {
-      return await this.storage.loadIdea(filename)
+      return await this.ensureStorage().loadIdea(filename)
     })
 
     ipcMain.handle('ideas:update', async (_, filename: string, content: string, metadata?: any): Promise<Idea> => {
-      return await this.storage.updateIdea(filename, content, metadata)
+      return await this.ensureStorage().updateIdea(filename, content, metadata)
     })
 
     ipcMain.handle('ideas:delete', async (_, filename: string): Promise<void> => {
-      return await this.storage.deleteIdea(filename)
+      return await this.ensureStorage().deleteIdea(filename)
     })
 
     ipcMain.handle('ideas:rename', async (_, oldFilename: string, newFilename: string): Promise<boolean> => {
-      return await this.storage.renameNote(oldFilename, newFilename)
+      return await this.ensureStorage().renameNote(oldFilename, newFilename)
     })
 
     ipcMain.handle('ideas:promote', async (_, ideaFilename: string, title: string, concepts?: string[]): Promise<Note> => {
-      return await this.storage.promoteIdeaToNote(ideaFilename, title, concepts)
+      return await this.ensureStorage().promoteIdeaToNote(ideaFilename, title, concepts)
     })
 
     // Idea metadata operations for unified context sidebar
     ipcMain.handle('ideas:attachConcept', async (_, filename: string, conceptName: string): Promise<void> => {
-      return await this.storage.attachConceptToIdea(filename, conceptName)
+      return await this.ensureStorage().attachConceptToIdea(filename, conceptName)
     })
 
     ipcMain.handle('ideas:removeConcept', async (_, filename: string, conceptName: string): Promise<void> => {
-      return await this.storage.removeConceptFromIdea(filename, conceptName)
+      return await this.ensureStorage().removeConceptFromIdea(filename, conceptName)
     })
 
     ipcMain.handle('ideas:linkNote', async (_, ideaFilename: string, noteFilename: string): Promise<void> => {
-      return await this.storage.linkNoteToIdea(ideaFilename, noteFilename)
+      return await this.ensureStorage().linkNoteToIdea(ideaFilename, noteFilename)
     })
 
     ipcMain.handle('ideas:removeNoteLink', async (_, ideaFilename: string, noteFilename: string): Promise<void> => {
-      return await this.storage.removeNoteLinkFromIdea(ideaFilename, noteFilename)
+      return await this.ensureStorage().removeNoteLinkFromIdea(ideaFilename, noteFilename)
     })
 
     ipcMain.handle('ideas:updateMetadata', async (_, filename: string, metadata: any): Promise<void> => {
-      return await this.storage.updateIdeaMetadata(filename, metadata)
+      return await this.ensureStorage().updateIdeaMetadata(filename, metadata)
     })
 
     // ============================================================================
@@ -81,23 +89,23 @@ export class IPCHandlers {
     // ============================================================================
 
     ipcMain.handle('notes:list', async (): Promise<Note[]> => {
-      return await this.storage.listNotes('notes')
+      return await this.ensureStorage().listNotes('notes')
     })
 
     ipcMain.handle('notes:load', async (_, filename: string): Promise<Note> => {
-      return await this.storage.loadNote(filename)
+      return await this.ensureStorage().loadNote(filename)
     })
 
     ipcMain.handle('notes:save', async (_, filename: string, content: string, metadata: any): Promise<boolean> => {
-      return await this.storage.saveNote(filename, content, metadata)
+      return await this.ensureStorage().saveNote(filename, content, metadata)
     })
 
     ipcMain.handle('notes:delete', async (_, filename: string): Promise<boolean> => {
-      return await this.storage.deleteNote(filename)
+      return await this.ensureStorage().deleteNote(filename)
     })
 
     ipcMain.handle('notes:rename', async (_, oldFilename: string, newFilename: string): Promise<boolean> => {
-      return await this.storage.renameNote(oldFilename, newFilename)
+      return await this.ensureStorage().renameNote(oldFilename, newFilename)
     })
 
 
@@ -106,11 +114,11 @@ export class IPCHandlers {
     // ============================================================================
 
     ipcMain.handle('concepts:list', async (): Promise<Concept[]> => {
-      return await this.storage.listConcepts()
+      return await this.ensureStorage().listConcepts()
     })
 
     ipcMain.handle('concepts:create', async (_, name: string, content: string, metadata?: any): Promise<boolean> => {
-      await this.storage.saveConcept(name, content, {
+      await this.ensureStorage().saveConcept(name, content, {
         created: new Date().toISOString(),
         modified: new Date().toISOString(),
         linkedNotes: [],
@@ -121,32 +129,32 @@ export class IPCHandlers {
     })
 
     ipcMain.handle('concepts:load', async (_, name: string): Promise<Concept> => {
-      return await this.storage.getConcept(name)
+      return await this.ensureStorage().getConcept(name)
     })
 
     ipcMain.handle('concepts:save', async (_, name: string, content: string, metadata: any): Promise<boolean> => {
-      return await this.storage.saveConcept(name, content, metadata)
+      return await this.ensureStorage().saveConcept(name, content, metadata)
     })
 
     ipcMain.handle('concepts:delete', async (_, name: string): Promise<boolean> => {
-      return await this.storage.deleteConcept(name)
+      return await this.ensureStorage().deleteConcept(name)
     })
 
     ipcMain.handle('concepts:getNotesFor', async (_, conceptName: string): Promise<string[]> => {
-      return await this.storage.getNotesForConcept(conceptName)
+      return await this.ensureStorage().getNotesForConcept(conceptName)
     })
 
     ipcMain.handle('concepts:getForNote', async (_, filename: string): Promise<string[]> => {
-      return await this.storage.getConceptsForNote(filename)
+      return await this.ensureStorage().getConceptsForNote(filename)
     })
 
     // Concept-to-concept relations
     ipcMain.handle('concepts:addRelation', async (_, fromConcept: string, toConcept: string): Promise<void> => {
-      return await this.storage.relations.addConceptRelation(fromConcept, toConcept)
+      return await this.ensureStorage().relations.addConceptRelation(fromConcept, toConcept)
     })
 
     ipcMain.handle('concepts:removeRelation', async (_, fromConcept: string, toConcept: string): Promise<void> => {
-      return await this.storage.relations.removeConceptRelation(fromConcept, toConcept)
+      return await this.ensureStorage().relations.removeConceptRelation(fromConcept, toConcept)
     })
 
     // ============================================================================
@@ -154,23 +162,23 @@ export class IPCHandlers {
     // ============================================================================
 
     ipcMain.handle('media:save', async (_, filename: string, data: string | Buffer, mimeType?: string, noteFilename?: string) => {
-      return await this.storage.saveMedia(filename, data, mimeType, noteFilename)
+      return await this.ensureStorage().saveMedia(filename, data, mimeType, noteFilename)
     })
 
     ipcMain.handle('media:load', async (_, filename: string) => {
-      return await this.storage.loadMedia(filename)
+      return await this.ensureStorage().loadMedia(filename)
     })
 
     ipcMain.handle('media:listForNote', async (_, noteFilename: string) => {
-      return await this.storage.listMediaForNote(noteFilename)
+      return await this.ensureStorage().listMediaForNote(noteFilename)
     })
 
     ipcMain.handle('media:delete', async (_, filename: string) => {
-      return await this.storage.deleteMedia(filename)
+      return await this.ensureStorage().deleteMedia(filename)
     })
 
     ipcMain.handle('media:listAll', async () => {
-      return await this.storage.listAllMedia()
+      return await this.ensureStorage().listAllMedia()
     })
 
     // ============================================================================
@@ -178,11 +186,11 @@ export class IPCHandlers {
     // ============================================================================
 
     ipcMain.handle('integrity:validate', async () => {
-      return await this.storage.validateAndRepairIntegrity()
+      return await this.ensureStorage().validateAndRepairIntegrity()
     })
 
     ipcMain.handle('integrity:repair', async () => {
-      return await this.storage.relations.repairRelations()
+      return await this.ensureStorage().relations.repairRelations()
     })
 
     // ============================================================================
@@ -195,9 +203,9 @@ export class IPCHandlers {
       concepts: Concept[]
     }> => {
       const [ideas, notes, concepts] = await Promise.all([
-        this.storage.listIdeas(),
-        this.storage.listNotes('notes'), 
-        this.storage.listConcepts()
+        this.ensureStorage().listIdeas(),
+        this.ensureStorage().listNotes('notes'), 
+        this.ensureStorage().listConcepts()
       ])
 
       const queryLower = query.toLowerCase()
@@ -219,11 +227,11 @@ export class IPCHandlers {
     })
 
     ipcMain.handle('search:notes', async (_, query: string, options?: any) => {
-      return await this.storage.searchNotes(query, options)
+      return await this.ensureStorage().searchNotes(query, options)
     })
 
     ipcMain.handle('content:parse', async (_, content: string) => {
-      return this.storage.parseContent(content)
+      return this.ensureStorage().parseContent(content)
     })
 
     // ============================================================================
@@ -231,11 +239,11 @@ export class IPCHandlers {
     // ============================================================================
 
     ipcMain.handle('files:checkUnique', async (_, filename: string, excludeFilename?: string) => {
-      return await this.storage.checkFilenameUnique(filename, excludeFilename)
+      return await this.ensureStorage().checkFilenameUnique(filename, excludeFilename)
     })
 
     ipcMain.handle('files:exists', async (_, filename: string) => {
-      return await this.storage.noteExists(filename)
+      return await this.ensureStorage().noteExists(filename)
     })
 
     // ============================================================================
@@ -243,50 +251,50 @@ export class IPCHandlers {
     // ============================================================================
 
     ipcMain.handle('relations:addNoteConcept', async (_, noteFilename: string, conceptName: string) => {
-      return await this.storage.relations.addNoteConcept(noteFilename, conceptName)
+      return await this.ensureStorage().relations.addNoteConcept(noteFilename, conceptName)
     })
 
     ipcMain.handle('relations:removeNoteConcept', async (_, noteFilename: string, conceptName: string) => {
-      return await this.storage.relations.removeNoteConcept(noteFilename, conceptName)
+      return await this.ensureStorage().relations.removeNoteConcept(noteFilename, conceptName)
     })
 
     ipcMain.handle('relations:updateNoteConcepts', async (_, noteFilename: string, oldConcepts: string[], newConcepts: string[]) => {
-      return await this.storage.relations.updateNoteConcepts(noteFilename, oldConcepts, newConcepts)
+      return await this.ensureStorage().relations.updateNoteConcepts(noteFilename, oldConcepts, newConcepts)
     })
 
     // Note-to-Note relations
     ipcMain.handle('relations:addNoteLink', async (_, fromNote: string, toNote: string) => {
-      return await this.storage.relations.addNoteLink(fromNote, toNote)
+      return await this.ensureStorage().relations.addNoteLink(fromNote, toNote)
     })
 
     ipcMain.handle('relations:removeNoteLink', async (_, fromNote: string, toNote: string) => {
-      return await this.storage.relations.removeNoteLink(fromNote, toNote)
+      return await this.ensureStorage().relations.removeNoteLink(fromNote, toNote)
     })
 
     ipcMain.handle('relations:updateNoteLinks', async (_, noteFilename: string, oldLinks: string[], newLinks: string[]) => {
-      return await this.storage.relations.updateNoteLinks(noteFilename, oldLinks, newLinks)
+      return await this.ensureStorage().relations.updateNoteLinks(noteFilename, oldLinks, newLinks)
     })
 
     // Concept-to-Concept relations
     ipcMain.handle('relations:addConceptRelation', async (_, fromConcept: string, toConcept: string) => {
-      return await this.storage.relations.addConceptRelation(fromConcept, toConcept)
+      return await this.ensureStorage().relations.addConceptRelation(fromConcept, toConcept)
     })
 
     ipcMain.handle('relations:removeConceptRelation', async (_, fromConcept: string, toConcept: string) => {
-      return await this.storage.relations.removeConceptRelation(fromConcept, toConcept)
+      return await this.ensureStorage().relations.removeConceptRelation(fromConcept, toConcept)
     })
 
     ipcMain.handle('relations:updateConceptRelations', async (_, conceptName: string, oldRelated: string[], newRelated: string[]) => {
-      return await this.storage.relations.updateConceptRelations(conceptName, oldRelated, newRelated)
+      return await this.ensureStorage().relations.updateConceptRelations(conceptName, oldRelated, newRelated)
     })
 
     // Integrity validation and repair
     ipcMain.handle('relations:validateIntegrity', async () => {
-      return await this.storage.relations.validateRelations()
+      return await this.ensureStorage().relations.validateRelations()
     })
 
     ipcMain.handle('relations:repairIntegrity', async () => {
-      return await this.storage.relations.repairRelations()
+      return await this.ensureStorage().relations.repairRelations()
     })
 
     // ============================================================================
@@ -294,19 +302,19 @@ export class IPCHandlers {
     // ============================================================================
 
     ipcMain.handle('app:getPinnedItems', async () => {
-      return await this.storage.getPinnedItems()
+      return await this.ensureStorage().getPinnedItems()
     })
 
     ipcMain.handle('app:pinItem', async (_, type: 'note' | 'concept', name: string) => {
-      return await this.storage.pinItem(type, name)
+      return await this.ensureStorage().pinItem(type, name)
     })
 
     ipcMain.handle('app:unpinItem', async (_, type: 'note' | 'concept', name: string) => {
-      return await this.storage.unpinItem(type, name)
+      return await this.ensureStorage().unpinItem(type, name)
     })
 
     ipcMain.handle('app:getRecentNotes', async (_, limit?: number) => {
-      return await this.storage.getRecentNotes(limit)
+      return await this.ensureStorage().getRecentNotes(limit)
     })
 
   }

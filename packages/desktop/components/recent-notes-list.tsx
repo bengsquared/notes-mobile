@@ -1,4 +1,3 @@
-'use client'
 
 import { ScrollArea } from './ui/scroll-area'
 import { Input } from './ui/input'
@@ -14,7 +13,7 @@ interface RecentNotesListProps {
   onNoteSelect: (filename: string) => void
 }
 
-export function RecentNotesList({ layoutState, onNoteSelect }: RecentNotesListProps) {
+export function RecentNotesList({ onNoteSelect }: RecentNotesListProps) {
   // Data from provider
   const { recentNotes, loading } = useRecentNotes()
   const { deleteNote } = useData()
@@ -22,7 +21,7 @@ export function RecentNotesList({ layoutState, onNoteSelect }: RecentNotesListPr
   // Search functionality
   const noteSearch = useSearch({
     items: recentNotes,
-    searchFields: ['metadata.title', 'content'],
+    searchFields: ['content'],
     filterFn: (note, query) => {
       const searchLower = query.toLowerCase()
       return (
@@ -30,7 +29,7 @@ export function RecentNotesList({ layoutState, onNoteSelect }: RecentNotesListPr
         note.content.toLowerCase().includes(searchLower) ||
         note.metadata.concepts?.some(concept => 
           concept.toLowerCase().includes(searchLower)
-        )
+        ) || false
       )
     }
   })

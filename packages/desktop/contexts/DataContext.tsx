@@ -1,4 +1,3 @@
-'use client'
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react'
 import type { Note, Concept } from '@notes-app/shared'

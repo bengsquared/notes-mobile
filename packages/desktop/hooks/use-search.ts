@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import type { Note, Concept } from '@notes-app/shared'
+import type { Note } from '@notes-app/shared'
 
 export interface UseSearchOptions<T> {
   items: T[]

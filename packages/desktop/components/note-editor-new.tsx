@@ -1,4 +1,3 @@
-'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 
@@ -9,6 +8,8 @@ import { Trash2 } from 'lucide-react'
 
 import { useUndoRedo, useAutosave, useErrorHandler } from '@notes-app/shared'
 import { usePinState } from '../hooks/use-pin-state'
+import { useDataHandler } from '../hooks/use-data-handler'
+import { useData } from '../contexts/DataContext'
 import { titleToFilename } from '../utils/filename'
 import { formatDateTime } from '../utils/date'
 
@@ -26,13 +27,15 @@ interface NoteState {
   content: string
 }
 
-export function NoteEditor({ noteFilename, onBack, onStateChange }: NoteEditorProps) {
+export function NoteEditor({ noteFilename, onBack }: NoteEditorProps) {
   const [note, setNote] = useState<Note | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   
   const { error, handleError, setValidating, clearError, setErrorMessage } = useErrorHandler()
   const { isPinned, togglePin } = usePinState('note', noteFilename)
+  const dataHandler = useDataHandler()
+  const { saveNote: saveNoteToContext, deleteNote: deleteNoteFromContext, renameNote } = useData()
 
   // Undo/redo state for title and content together
   const {
@@ -63,7 +66,7 @@ export function NoteEditor({ noteFilename, onBack, onStateChange }: NoteEditorPr
         setValidating(true)
         
         // Check if new filename is unique
-        const isUnique = await window.electronAPI.notes.checkUnique(newFilename, note.filename)
+        const isUnique = await dataHandler.checkFilenameUnique(newFilename, note.filename)
         if (!isUnique) {
           const error = `A note with the title "${noteData.title}" already exists`
           setErrorMessage(error)
@@ -72,7 +75,7 @@ export function NoteEditor({ noteFilename, onBack, onStateChange }: NoteEditorPr
         }
         
         // Rename the note file first
-        await window.electronAPI.notes.rename(note.filename, newFilename)
+        await renameNote(note.filename, newFilename)
         
         // Update the note state with new filename
         setNote(prev => prev ? { ...prev, filename: newFilename } : null)
@@ -82,7 +85,7 @@ export function NoteEditor({ noteFilename, onBack, onStateChange }: NoteEditorPr
       
       // Save the content with updated metadata
       const targetFilename = newFilename !== note.filename ? newFilename : note.filename
-      await window.electronAPI.notes.save(targetFilename, noteData.content, {
+      await saveNoteToContext(targetFilename, noteData.content, {
         ...note.metadata,
         title: noteData.title.trim(),
         modified: new Date().toISOString()
@@ -105,14 +108,30 @@ export function NoteEditor({ noteFilename, onBack, onStateChange }: NoteEditorPr
       handleError(err)
       throw err
     }
-  }, [note])
+  }, [note, dataHandler, renameNote, saveNoteToContext])
+
+  const loadNote = useCallback(async () => {
+    try {
+      const noteData = await dataHandler.loadNote(noteFilename)
+      setNote(noteData)
+      const initialState = {
+        title: noteData.metadata.title || '',
+        content: noteData.content
+      }
+      resetHistory(initialState)
+      setLoading(false)
+    } catch (error) {
+      console.error('Error loading note:', error)
+      setLoading(false)
+    }
+  }, [dataHandler, noteFilename, resetHistory])
 
   // Autosave hook
   const { saveNow } = useAutosave(noteState, saveNote, 2000, !!note)
 
   useEffect(() => {
     loadNote()
-  }, [noteFilename])
+  }, [noteFilename, loadNote])
 
   // Save when leaving the editor - use refs to get current values
   const noteRef = useRef(note)
@@ -129,22 +148,6 @@ export function NoteEditor({ noteFilename, onBack, onStateChange }: NoteEditorPr
       }
     }
   }, [saveNow]) // Include saveNow in deps
-
-  const loadNote = async () => {
-    try {
-      const noteData = await window.electronAPI.notes.load(noteFilename)
-      setNote(noteData)
-      const initialState = {
-        title: noteData.metadata.title || '',
-        content: noteData.content
-      }
-      resetHistory(initialState)
-      setLoading(false)
-    } catch (error) {
-      console.error('Error loading note:', error)
-      setLoading(false)
-    }
-  }
 
   const handleTitleChange = (newTitle: string) => {
     setNoteState(prev => ({ ...prev, title: newTitle }))
@@ -186,7 +189,7 @@ export function NoteEditor({ noteFilename, onBack, onStateChange }: NoteEditorPr
     }
 
     try {
-      await window.electronAPI.trashNote(note.filename)
+      await deleteNoteFromContext(note.filename)
       // Navigate back after successful deletion
       onBack()
     } catch (error) {

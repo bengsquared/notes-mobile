@@ -23,6 +23,7 @@ dist
 # electron builds
 packages/desktop/dist/
 packages/desktop/out/
+packages/desktop/out-mcp-tray/
 packages/desktop/release/
 
 # package outputs

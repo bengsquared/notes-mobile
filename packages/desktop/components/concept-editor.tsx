@@ -1,9 +1,7 @@
-'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { ArrowLeft, Undo, Redo, Pin, PinOff, Trash2 } from 'lucide-react'
 import { Button } from './ui/button'
-import { Input } from './ui/input'
 import { Textarea } from './ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog'
 import { useUndoRedo, useAutosave } from '@notes-app/shared'
@@ -22,7 +20,7 @@ interface ConceptState {
   content: string
 }
 
-export function ConceptEditor({ conceptName, onBack, onStateChange }: ConceptEditorProps) {
+export function ConceptEditor({ conceptName, onBack }: ConceptEditorProps) {
   const [concept, setConcept] = useState<Concept | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)

@@ -1,4 +1,3 @@
-'use client'
 
 import { ItemCard, ItemCardAction } from './ui/item-card'
 import { usePinState } from '../hooks/use-pin-state'
@@ -54,8 +53,7 @@ export function RecentNoteListItem({ note, onSelect, onDelete }: RecentNoteListI
       title={note.metadata.title || note.filename.replace('.txt', '')}
       description={note.content.substring(0, 150) + (note.content.length > 150 ? '...' : '')}
       timestamp={note.metadata.modified}
-      badge={formatRelativeTime(note.metadata.modified)}
-      concepts={note.metadata.concepts}
+      badges={[formatRelativeTime(note.metadata.modified), ...(note.metadata.concepts || [])].filter(Boolean)}
       icon={FileText}
       actions={actions}
       onClick={() => onSelect(note.filename)}

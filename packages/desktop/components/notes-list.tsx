@@ -1,4 +1,3 @@
-'use client'
 
 import { useState } from 'react'
 import { ScrollArea } from './ui/scroll-area'
@@ -15,11 +14,11 @@ interface NotesListProps {
   onStateChange?: (state: LayoutState) => void
 }
 
-export function NotesList({ layoutState, onNoteSelect, onStateChange }: NotesListProps) {
+export function NotesList({ onNoteSelect }: NotesListProps) {
   const [searchQuery, setSearchQuery] = useState('')
   
   // Data from provider
-  const { notes, loading, saveNote, deleteNote } = useNotes()
+  const { notes, loading, deleteNote } = useNotes()
 
   const filteredNotes = notes.filter(note => {
     if (!searchQuery) return true
@@ -33,10 +32,6 @@ export function NotesList({ layoutState, onNoteSelect, onStateChange }: NotesLis
     )
   })
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return ''
-    return new Date(dateString).toLocaleDateString()
-  }
 
 
   const handleDeleteNote = async (filename: string) => {

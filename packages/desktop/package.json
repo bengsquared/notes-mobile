@@ -11,9 +11,8 @@
     "preview": "electron-vite preview",
     "start": "../../node_modules/.bin/electron out/main/index.js",
     "electron": "../../node_modules/.bin/electron out/main/index.js",
-    "mcp": "../../node_modules/.bin/electron out/main/index.js --mcp",
-    "dev:mcp": "pnpm run build && pnpm run mcp",
-    "dist": "pnpm run build && electron-builder"
+    "dist": "pnpm run build && electron-builder",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
@@ -94,7 +93,15 @@
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "node_modules/@modelcontextprotocol/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/",
+        "to": "resources/",
+        "filter": ["**/*"]
+      }
     ],
     "mac": {
       "icon": "resources/icon.icns",

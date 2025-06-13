@@ -1,4 +1,3 @@
-'use client'
 
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Settings, Folder, Zap, Brain, Database } from 'lucide-react'
@@ -6,11 +5,9 @@ import { Button } from './ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
-import { ScrollArea } from './ui/scroll-area'
 import { Separator } from './ui/separator'
 import { MCPSetup } from './mcp-setup'
 import type { StorageConfig } from '@notes-app/shared'
-import type { LayoutState } from './main-layout'
 
 interface SettingsPageProps {
   onBack: () => void
@@ -48,7 +45,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       setLoading(false)
     } catch (error) {
       console.error('Settings: Error loading settings:', error)
-      console.error('Settings: Error details:', error.message, error.stack)
+      console.error('Settings: Error details:', error instanceof Error ? error.message : String(error), error instanceof Error ? error.stack : undefined)
       setLoading(false)
     }
   }
@@ -66,7 +63,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
         console.log('Settings: Settings reloaded')
         
         // Check immediately if directory changed to show restart prompt
-        const currentDirectory = storageConfig?.notesDirectory
         if (originalDirectory && selectedPath !== originalDirectory) {
           console.log('Settings: Directory changed from', originalDirectory, 'to', selectedPath)
           // Settings will be updated by loadSettings, then handleBack will detect the change
@@ -76,7 +72,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       }
     } catch (error) {
       console.error('Settings: Error selecting notes directory:', error)
-      console.error('Settings: Error details:', error.message, error.stack)
+      console.error('Settings: Error details:', error instanceof Error ? error.message : String(error), error instanceof Error ? error.stack : undefined)
     }
   }
 

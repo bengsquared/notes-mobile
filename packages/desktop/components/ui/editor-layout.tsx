@@ -155,7 +155,7 @@ export function EditorLayout({
       {/* Content */}
       <div className="flex-1 flex flex-col">
         {/* Error Alert */}
-        <ErrorAlert message={error} className="m-4 mb-0" />
+        <ErrorAlert message={error || null} className="m-4 mb-0" />
         
         {/* Main content */}
         <div className="flex-1 overflow-hidden">

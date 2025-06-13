@@ -1,4 +1,3 @@
-'use client'
 
 import { useState, useEffect, useMemo } from 'react'
 import { ArrowLeft, Hash, X } from 'lucide-react'
@@ -31,7 +30,7 @@ export function ConceptNotesList({ conceptName, onBack, onNoteSelect, onStateCha
   const { error, handleError, clearError } = useErrorHandler()
   
   // Data from provider
-  const { notes, saveNote, getNotesForConcept, addNoteConcept, removeNoteConcept } = useData()
+  const { notes, getNotesForConcept, addNoteConcept, removeNoteConcept } = useData()
   
   // Filter notes that don't already have this concept
   const filteredAvailableNotes = useMemo(() => {

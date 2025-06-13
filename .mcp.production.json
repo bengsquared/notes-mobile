@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "notes-app": {
+      "type": "stdio",
+      "command": "/Users/ben/Documents/notes-mobile/packages/desktop/dist/electron/mac-arm64/Notes Desktop.app/Contents/MacOS/Notes Desktop",
+      "args": [
+        "--mcp"
+      ],
+      "env": {
+        "NODE_ENV": "production"
+      },
+      "description": "Personal notes management with AI-powered search, ideas inbox, and concept mapping"
+    }
+  }
+}

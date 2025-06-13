@@ -1,4 +1,3 @@
-'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { ArrowLeft, Trash2, SkipForward, Check, Smartphone, Copy, Undo, Redo, AlertCircle } from 'lucide-react'
@@ -41,12 +40,9 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
     renameIdea,
     promoteIdea,
     deleteIdea,
-    attachConceptToIdea, 
-    removeConceptFromIdea, 
-    linkNoteToIdea, 
-    removeNoteLinkFromIdea 
+ 
   } = useIdeas()
-  const { loadNotes, checkFilenameUnique } = useData()
+  const { checkFilenameUnique } = useData()
   
   // Undo/redo functionality - single source of truth
   const {
@@ -138,45 +134,6 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
   // Update noteStateRef
   noteStateRef.current = noteState
 
-  const handleConceptSelect = (conceptName: string) => {
-    console.log('📌 Concept selected:', conceptName)
-    if (noteState.selectedConcepts.includes(conceptName)) {
-      console.log('📌 Concept already selected, skipping')
-      return
-    }
-    setNoteState(prev => ({
-      ...prev,
-      selectedConcepts: [...prev.selectedConcepts, conceptName]
-    }))
-  }
-
-  const handleConceptDeselect = (conceptName: string) => {
-    console.log('📌 Concept deselected:', conceptName)
-    setNoteState(prev => ({
-      ...prev,
-      selectedConcepts: prev.selectedConcepts.filter(c => c !== conceptName)
-    }))
-  }
-
-  // Note: The unified context sidebar will handle its own concept management
-  // These handlers are kept for the concept chips display in the main panel
-  
-  // Callback to sync unified context sidebar changes with local state
-  const handleItemChange = (updatedItem: Note) => {
-    setNoteState(prev => ({
-      ...prev,
-      selectedConcepts: updatedItem.metadata.concepts || []
-    }))
-  }
-
-  const handleNoteLink = (noteToLink: Note) => {
-    console.log('🔗 handleNoteLink called with note:', noteToLink.metadata.title || noteToLink.filename)
-    
-    // For inbox processing, we just want to reference the note
-    // This could be used to insert a reference into the content
-    // For now, let's just log it - you can expand this functionality later
-    console.log('🔗 Note link functionality can be expanded here')
-  }
 
   const loadInboxNotes = async () => {
     try {
@@ -308,7 +265,7 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
 
   const handleSkip = () => {
     const newIndex = (currentIndex + 1) % ideas.length
-    onStateChange(prev => ({ ...prev, inboxCurrentIndex: newIndex }))
+    onStateChange({ ...layoutState, inboxCurrentIndex: newIndex })
   }
 
   const handleAccept = async () => {
@@ -349,8 +306,8 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
   const removeCurrentNoteAndAdvance = async () => {
     // DataContext will handle the actual removal, we just need to handle navigation
     if (ideas.length <= 1) {
-      // No more notes, return to main view
-      onStateChange({ selectedNote: null, selectedConcept: null, view: 'notes', inboxCount: 0, inboxNotes: [], inboxCurrentIndex: 0 })
+      // No more notes, stay in inbox view to show empty state
+      onStateChange({ ...layoutState, view: 'inbox', inboxCurrentIndex: 0 })
       return
     }
 
@@ -362,10 +319,10 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
     // Otherwise keep the same index (which will point to the next item after removal)
     
     // Update current index
-    onStateChange(prev => ({ 
-      ...prev, 
+    onStateChange({ 
+      ...layoutState, 
       inboxCurrentIndex: newIndex
-    }))
+    })
   }
 
   const generateTransferPin = async () => {
@@ -459,19 +416,78 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
 
   if (ideas.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="text-xl font-medium text-muted-foreground mb-2">📥</div>
-          <div className="text-lg font-medium">Inbox is empty</div>
-          <div className="text-sm text-muted-foreground mt-2 mb-6">All ideas have been processed! Click the + button in the sidebar to add new ideas.</div>
-          <div className="flex gap-2 justify-center">
-            <Button 
-              variant="outline" 
-              onClick={() => onStateChange({ selectedNote: null, selectedConcept: null, view: 'notes', inboxCount: 0 })}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Notes
-            </Button>
+      <div className="h-full flex flex-col">
+        {/* Header with Transfer PIN */}
+        <div className="flex-shrink-0">
+          <div className="bg-background border-b px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onStateChange({ ...layoutState, selectedNote: undefined, selectedConcept: undefined, view: 'notes' })}
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Notes
+                </Button>
+              </div>
+
+              {/* Transfer PIN Section */}
+              <div className="flex items-center gap-2">
+                {transferPin ? (
+                  <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded px-3 py-1">
+                    <Smartphone className="h-4 w-4 text-green-600" />
+                    <span className="font-mono text-sm">{transferPin}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={copyTransferPin}
+                      className="h-6 w-6 p-0"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={generateTransferPin}
+                    disabled={generatePinLoading}
+                  >
+                    <Smartphone className="h-4 w-4 mr-2" />
+                    {generatePinLoading ? 'Generating...' : 'Generate PIN'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Empty State Content */}
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center max-w-md">
+            <div className="text-xl font-medium text-muted-foreground mb-2">📥</div>
+            <div className="text-lg font-medium">Inbox is empty</div>
+            <div className="text-sm text-muted-foreground mt-2 mb-6">All ideas have been processed! Create a new idea to get started.</div>
+            <div className="flex gap-2 justify-center">
+              <Button 
+                variant="outline" 
+                onClick={async () => {
+                  // Create a new idea using the electron API
+                  if (window.electronAPI?.ideas?.create) {
+                    try {
+                      await window.electronAPI.ideas.create('', { processed: false })
+                      // Reload ideas to reflect the new idea
+                      await loadIdeas()
+                    } catch (error) {
+                      console.error('Error creating new idea:', error)
+                    }
+                  }
+                }}
+              >
+                + Create New Idea
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -488,7 +504,7 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => onStateChange({ selectedNote: null, selectedConcept: null, view: 'notes' })}
+                onClick={() => onStateChange({ ...layoutState, selectedNote: undefined, selectedConcept: undefined, view: 'notes' })}
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back to Notes

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, Tray, nativeImage } from 'electron';
 import path from 'path';
 import { createServer } from 'http';
 import Store from 'electron-store';
@@ -10,6 +10,36 @@ import os from 'os';
 import { Bonjour } from 'bonjour-service';
 
 const { join } = path;
+
+// Helper functions for icon paths
+function getAppIcon(): string {
+  const resourcesPath = app.isPackaged ? process.resourcesPath : join(__dirname, '../../');
+  
+  if (process.platform === 'darwin') {
+    return join(resourcesPath, 'resources/icon.icns');
+  } else if (process.platform === 'win32') {
+    // Use logo.png for Windows since we don't have .ico
+    return join(resourcesPath, 'resources/logo.png');
+  } else {
+    return join(resourcesPath, 'resources/logo.png');
+  }
+}
+
+function getTrayIcon(): Electron.NativeImage {
+  if (process.platform === 'darwin') {
+    // Use template icon for macOS tray (allows for proper dark/light mode handling)
+    const templatePath = app.isPackaged 
+      ? join(process.resourcesPath, 'resources/template@2x.png')
+      : join(__dirname, '../../resources/template@2x.png');
+    return nativeImage.createFromPath(templatePath);
+  } else {
+    // Use regular icon for other platforms
+    const iconPath = app.isPackaged
+      ? join(process.resourcesPath, 'resources/logo.png')
+      : join(__dirname, '../../resources/logo.png');
+    return nativeImage.createFromPath(iconPath);
+  }
+}
 
 // Check if we're in MCP mode early
 const isMCPMode = process.env.ENABLE_MCP_SERVER === 'true' || process.argv.includes('--mcp');
@@ -39,6 +69,7 @@ const store = new Store({
   name: 'notes-app-config' // Use consistent name for both dev and production
 });
 let mainWindow: typeof BrowserWindow.prototype | null = null;
+let tray: Tray | null = null;
 let currentPIN: string | null = null;
 let pinExpiryTimeout: NodeJS.Timeout | null = null;
 let storage: NotesStorage | null = null;
@@ -61,7 +92,7 @@ async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    icon: join(__dirname, '../../resources/logo.png'),
+    icon: getAppIcon(),
     show: false, // Don't show until ready
     webPreferences: {
       nodeIntegration: false,
@@ -72,7 +103,7 @@ async function createWindow() {
 
   // Use app.isPackaged to determine if we're in production
   const isPackaged = app.isPackaged;
-  
+
   if (!isPackaged && process.env.NODE_ENV !== 'production') {
     // Development mode - use Vite dev server
     mainWindow.loadURL('http://localhost:5173');
@@ -85,9 +116,9 @@ async function createWindow() {
     logger.log('Loading renderer from path:', rendererPath);
     logger.log('App is packaged:', isPackaged);
     logger.log('__dirname:', __dirname);
-    
+
     mainWindow.loadFile(rendererPath);
-    
+
     // Disable dev tools in production
     mainWindow.webContents.on('before-input-event', (event, input) => {
       if (input.control && input.shift && input.key.toLowerCase() === 'i') {
@@ -97,19 +128,19 @@ async function createWindow() {
         event.preventDefault();
       }
     });
-    
+
     // Debug: Log when page finishes loading
     mainWindow.webContents.once('did-finish-load', () => {
       logger.log('Renderer process finished loading');
       // Show window once content is loaded
       mainWindow?.show();
     });
-    
+
     // Debug: Log any errors
     mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
       logger.error('Failed to load renderer:', errorCode, errorDescription);
     });
-    
+
     // Ensure dev tools are closed
     mainWindow.webContents.on('devtools-opened', () => {
       if (isPackaged && mainWindow) {
@@ -121,6 +152,82 @@ async function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+function createTray() {
+  const trayIcon = getTrayIcon();
+  tray = new Tray(trayIcon);
+
+  // Set tooltip
+  tray.setToolTip('Notes App');
+
+  // Create context menu for tray
+  const contextMenu = Menu.buildFromTemplate([
+    ...(isMCPMode ? [
+      {
+        label: 'MCP Server Running',
+        enabled: false
+      },
+      {
+        label: 'Claude integration active',
+        enabled: false
+      },
+      { type: 'separator' as const },
+      {
+        label: 'Open Full App',
+        click: () => {
+          // Launch a new instance without MCP mode
+          const { spawn } = require('child_process');
+          const appPath = process.execPath;
+          spawn(appPath, [], { detached: true, stdio: 'ignore' }).unref();
+        }
+      }
+    ] : [
+      {
+        label: 'Show App',
+        click: () => {
+          if (mainWindow === null) {
+            createWindow();
+          } else {
+            mainWindow.show();
+            mainWindow.focus();
+          }
+        }
+      },
+      {
+        label: 'New Window',
+        click: () => {
+          createWindow();
+        }
+      },
+      { type: 'separator' as const },
+      {
+        label: 'Notes App',
+        enabled: false
+      }
+    ]),
+    { type: 'separator' as const },
+    {
+      label: 'Quit',
+      click: () => {
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  // Handle tray icon click
+  // tray.on('click', () => {
+  //   if (mainWindow === null) {
+  //     createWindow();
+  //   } else if (mainWindow.isVisible()) {
+  //     mainWindow.hide();
+  //   } else {
+  //     mainWindow.show();
+  //     mainWindow.focus();
+  //   }
+  // });
 }
 
 // Set up application menu with option to create new windows
@@ -147,7 +254,9 @@ function setupApplicationMenu() {
           label: 'New Window',
           accelerator: 'CmdOrCtrl+N',
           click: () => {
-            createWindow();
+            if (!isMCPMode) {
+              createWindow();
+            }
           }
         },
         { type: 'separator' },
@@ -224,17 +333,17 @@ function generateTransferPIN(): string {
     logger.log(`🧹 Clearing existing PIN timeout`);
     clearTimeout(pinExpiryTimeout);
   }
-  
+
   currentPIN = generatePIN();
   logger.log(`🔢 New PIN generated: ${currentPIN}`);
-  
+
   // Set PIN to expire after 5 minutes
   pinExpiryTimeout = setTimeout(() => {
     logger.log(`⏰ PIN ${currentPIN} expired after 5 minutes`);
     currentPIN = null;
     mainWindow?.webContents.send('pin-expired');
   }, 5 * 60 * 1000);
-  
+
   logger.log(`⏱️ PIN will expire in 5 minutes`);
   return currentPIN;
 }
@@ -262,7 +371,7 @@ function setupRPCServer() {
   };
 
   const localIP = getLocalIP();
-  
+
   rpcServer = createServer((req: any, res: any) => {
     // Set CORS headers for cross-origin requests from web apps
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -278,8 +387,8 @@ function setupRPCServer() {
     // Handle discovery endpoint for web apps to find this desktop
     if (req.method === 'GET' && req.url === '/discover') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ 
-        service: 'notes-app', 
+      res.end(JSON.stringify({
+        service: 'notes-app',
         version: '1.0.0',
         hostname: os.hostname(),
         ip: localIP,
@@ -299,13 +408,13 @@ function setupRPCServer() {
           logger.log(`📥 Received RPC request body: ${body}`);
           logger.log(`🔑 Current PIN state: ${currentPIN ? `Active (${currentPIN})` : 'None'}`);
           logger.log(`📨 RPC Request: ${data.method} (ID: ${data.id})`);
-          
+
           // Handle ping method
           if (data.method === 'ping') {
             logger.log(`🏓 Ping received, responding with pong`);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ jsonrpc: '2.0', result: 'pong', id: data.id }));
-          } 
+          }
           // Handle getTransferPIN method - generates and returns a new PIN
           else if (data.method === 'getTransferPIN') {
             const pin = generateTransferPIN();
@@ -318,7 +427,7 @@ function setupRPCServer() {
           else if (data.method === 'transferNotesWithCode' && data.params?.code && data.params?.notes !== undefined) {
             const { code, notes } = data.params;
             logger.log(`🔐 Transfer request with code: ${code}, notes: ${notes.length}, current PIN: ${currentPIN}`);
-            
+
             // Check if code matches current PIN
             if (currentPIN !== code) {
               logger.error(`❌ Invalid connection code provided: ${code} (expected: ${currentPIN})`);
@@ -337,7 +446,7 @@ function setupRPCServer() {
               }
 
               logger.log(`📝 Processing transfer of ${notes.length} notes with code ${code}`);
-              
+
               // Save notes as ideas
               if (storage) {
                 logger.log(`💾 Saving ${notes.length} notes as ideas to storage`);
@@ -350,7 +459,7 @@ function setupRPCServer() {
                       .substring(0, 50)
                       .replace(/[\r\n]+/g, ' ')
                       .trim();
-                    
+
                     // Prepare the content with location info if available
                     let enrichedContent = note.content;
                     if (note.location && note.location.lat && note.location.lng) {
@@ -360,7 +469,7 @@ function setupRPCServer() {
                       enrichedContent = note.content + locationInfo;
                       logger.log(`  📍 Adding location data: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
                     }
-                    
+
                     await storage.createIdea(enrichedContent, {
                       title: title || 'Transferred note',
                       created: note.createdAt || new Date().toISOString(),
@@ -376,16 +485,16 @@ function setupRPCServer() {
               } else {
                 logger.error(`❌ Storage not available! Cannot save notes.`);
               }
-              
+
               // Process notes with media for any additional handling
               const processedNotes = notes.map((note: any) => ({
                 ...note,
                 media: note.media || []
               }));
-              
+
               logger.log(`📢 Sending notes-received event to renderer process`);
               mainWindow?.webContents.send('notes-received', processedNotes);
-              
+
               // Clear PIN after successful transfer (only for actual transfers, not validation)
               logger.log(`🧹 Clearing PIN after successful transfer`);
               currentPIN = null;
@@ -393,11 +502,11 @@ function setupRPCServer() {
                 clearTimeout(pinExpiryTimeout);
                 pinExpiryTimeout = null;
               }
-              
+
               logger.log(`✅ Transfer completed successfully: ${notes.length} notes received`);
               res.writeHead(200, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ jsonrpc: '2.0', result: { success: true, notesReceived: notes.length }, id: data.id }));
-              
+
             } catch (error) {
               logger.error(`❌ Error processing transfer:`, error);
               res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -412,19 +521,19 @@ function setupRPCServer() {
               res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32001, message: 'PIN required' }, id: data.id }));
               return;
             }
-            
+
             if (!validatePIN(data.params.pin)) {
               res.writeHead(401, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32002, message: 'Invalid or expired PIN' }, id: data.id }));
               return;
             }
-            
+
             logger.log('Received notes from web app via PIN transfer');
-            
+
             // Save each note as an idea (since they come from web/mobile)
             if (storage) {
               logger.log(`Saving ${data.params.notes.length} notes as ideas`);
-              
+
               for (let i = 0; i < data.params.notes.length; i++) {
                 const note = data.params.notes[i];
                 try {
@@ -437,27 +546,27 @@ function setupRPCServer() {
                   logger.error(`Error saving note ${i + 1} as idea:`, error);
                 }
               }
-              
+
               logger.log('Finished saving all notes as ideas');
             } else {
               logger.error('Storage is not available! Cannot save notes.');
             }
-            
+
             // Process notes with media for any additional handling
             const processedNotes = data.params.notes.map((note: any) => ({
               ...note,
               media: note.media || []
             }));
-            
+
             mainWindow?.webContents.send('notes-received', processedNotes);
-            
+
             // Clear PIN after successful transfer
             currentPIN = null;
             if (pinExpiryTimeout) {
               clearTimeout(pinExpiryTimeout);
               pinExpiryTimeout = null;
             }
-            
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ jsonrpc: '2.0', result: { success: true, notesReceived: data.params.notes.length }, id: data.id }));
           } else {
@@ -479,16 +588,16 @@ function setupRPCServer() {
 
   // Use different ports for dev/prod to avoid conflicts
   const rpcPort = isDev ? 8081 : 8080;
-  
+
   rpcServer.listen(rpcPort, '0.0.0.0', () => {
     logger.log(`🚀 RPC server listening on ${localIP}:${rpcPort}`);
     logger.log(`🔑 Initial PIN state: ${currentPIN ? `Active (${currentPIN})` : 'None'}`);
-    
+
     // Set up mDNS service advertisement
     if (!bonjour) {
       bonjour = new Bonjour();
     }
-    
+
     // Advertise the notes transfer service
     const service = bonjour.publish({
       name: `Notes-${os.hostname()}${isDev ? '-dev' : ''}`,
@@ -500,13 +609,13 @@ function setupRPCServer() {
         ip: localIP
       }
     });
-    
+
     logger.log(`mDNS service advertised: Notes-${os.hostname()}._notes-transfer._tcp.local`);
-    
+
     service.on('up', () => {
       logger.log('mDNS service is up and running');
     });
-    
+
     service.on('error', (err: any) => {
       logger.error('mDNS service error:', err);
     });
@@ -517,29 +626,38 @@ function setupRPCServer() {
 app.whenReady().then(async () => {
   // Register essential IPC handlers first
   registerTransferHandlers();
-  
+
   // Set up application menu
   setupApplicationMenu();
+
+  // Create tray icon for all modes
+  createTray();
   
   // Create window immediately for faster startup (unless in MCP mode)
   if (!isMCPMode) {
     createWindow();
   } else {
     logger.log('🔧 MCP mode: App started without window. Use File > New Window or click dock icon to open interface.');
-    
+    // app.dock?.hide(); // Hide dock icon in MCP mode - commented out for now
+    // In MCP mode, we don't create a window immediately
     // Set dock icon badge to indicate MCP mode
     if (process.platform === 'darwin') {
       app.dock?.setBadge('MCP');
     }
   }
-  
+
   // Initialize storage and RPC server in background
-  Promise.all([
-    initializeStorage(),
-    setupRPCServer()
-  ]).catch(error => {
-    logger.error('Background initialization failed:', error);
-  });
+  if (!isMCPMode) {
+    Promise.all([
+      initializeStorage(),
+      setupRPCServer()
+    ]).catch(error => {
+      logger.error('Background initialization failed:', error);
+    });
+  } else {
+    // In MCP mode, just initialize the MCP server
+    initializeStorage();
+  }
 });
 
 // Register app event handlers for both modes
@@ -553,16 +671,21 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   // Clean up services
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
+
   if (bonjour) {
     bonjour.destroy();
     bonjour = null;
   }
-  
+
   if (rpcServer) {
     rpcServer.close();
     rpcServer = null;
   }
-  
+
   if (pinExpiryTimeout) {
     clearTimeout(pinExpiryTimeout);
     pinExpiryTimeout = null;
@@ -570,9 +693,13 @@ app.on('before-quit', () => {
 });
 
 app.on('activate', () => {
-  // Create window when clicking dock icon (both modes)
-  if (mainWindow === null) {
+  // Create window when clicking dock icon (only in normal mode)
+  if (mainWindow === null && !isMCPMode) {
     createWindow();
+  }
+  // In MCP mode, just show the dock icon badge
+  if (isMCPMode && process.platform === 'darwin') {
+    app.dock?.setBadge('MCP');
   }
 });
 
@@ -587,35 +714,35 @@ app.on('browser-window-created', () => {
 // Initialize storage on startup
 async function initializeStorage() {
   const isMCPMode = process.env.ENABLE_MCP_SERVER === 'true' || process.argv.includes('--mcp');
-  
+
   logger.log('🗄️ Initializing storage...');
-  
+
   // Debug electron-store
   logger.log('🗄️ Electron store path:', store.path);
   logger.log('🗄️ Store contents:', store.store);
-  
+
   // Get the stored directory - don't set default automatically
   let notesDirectory = store.get('notesDirectory') as string | undefined;
   logger.log('🗄️ Retrieved notesDirectory from store:', notesDirectory);
-  
+
   if (!notesDirectory) {
     // First time setup - will trigger folder selection in renderer
     logger.log('🗄️ No directory configured - first time setup required');
     return; // Don't initialize storage yet
   }
-  
+
   await initializeStorageWithDirectory(notesDirectory);
 }
 
 // Initialize storage with a specific directory
 async function initializeStorageWithDirectory(notesDirectory: string) {
   const isMCPMode = process.env.ENABLE_MCP_SERVER === 'true' || process.argv.includes('--mcp');
-  
+
   logger.log('🗄️ Using notes directory:', notesDirectory);
-  
+
   storage = new NotesStorage(notesDirectory);
   await storage.initialize();
-  
+
   // Set up IPC handlers only if they don't exist yet
   if (!ipcHandlers) {
     ipcHandlers = new IPCHandlers(storage);
@@ -623,15 +750,15 @@ async function initializeStorageWithDirectory(notesDirectory: string) {
     // Update existing handlers
     ipcHandlers.updateStorage(storage);
   }
-  
+
   logger.log('🗄️ Storage initialized successfully');
-  
+
   // Validate integrity
   const integrity = await storage.validateAndRepairIntegrity();
   if (integrity.issues && integrity.issues.length > 0) {
     logger.log(`🔧 Found ${integrity.issues.length} integrity issues`);
   }
-  
+
   // Initialize MCP server if in MCP mode
   if (isMCPMode) {
     await initializeMCPServer();
@@ -660,10 +787,10 @@ async function generateMCPConfig() {
   try {
     const appPath = app.getPath('exe');
     const configPath = getClaudeDesktopConfigPath();
-    
+
     // Check if we're in development (Electron binary) or production (app bundle)
     const isDev = appPath.includes('node_modules') || appPath.includes('Electron.app');
-    
+
     let mcpConfig: { mcpServers: { [key: string]: { command: string; args: string[]; description: string } } };
     if (isDev) {
       // Development: Use electron command with the built main file and --mcp flag
@@ -697,7 +824,7 @@ async function generateMCPConfig() {
       appPath,
       isDev
     };
-    
+
   } catch (error) {
     logger.error('Error generating MCP config:', error);
     throw error;
@@ -707,7 +834,7 @@ async function generateMCPConfig() {
 function getClaudeDesktopConfigPath(): string {
   const platform = process.platform;
   const homeDir = os.homedir();
-  
+
   switch (platform) {
     case 'darwin': // macOS
       return path.join(homeDir, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
@@ -741,7 +868,7 @@ if (!isMCPMode) {
     logger.log('Main: mainWindow exists?', !!mainWindow);
     logger.log('Main: mainWindow focused?', mainWindow?.isFocused());
     logger.log('Main: mainWindow visible?', mainWindow?.isVisible());
-    
+
     try {
       // Check permissions on macOS
       if (process.platform === 'darwin') {
@@ -756,7 +883,7 @@ if (!isMCPMode) {
           logger.error('Main: Permissions error:', permError);
         }
       }
-      
+
       // Ensure window is focused before showing dialog
       if (mainWindow && !mainWindow.isFocused()) {
         logger.log('Main: Focusing window before dialog...');
@@ -764,10 +891,10 @@ if (!isMCPMode) {
         // Small delay to ensure focus is complete
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      
+
       logger.log('Main: About to show dialog...');
       logger.log('Main: Current documents path:', app.getPath('documents'));
-      
+
       // Show directory picker dialog - use both openFile and openDirectory for macOS compatibility
       const dialogOptions: Electron.OpenDialogOptions = {
         title: 'Select Notes Directory',
@@ -776,10 +903,10 @@ if (!isMCPMode) {
         properties: process.platform === 'darwin' ? ['openFile', 'openDirectory'] : ['openDirectory'],
         message: 'Choose a directory for storing your notes'
       };
-      
+
       logger.log('Main: Dialog options:', JSON.stringify(dialogOptions));
       logger.log('Main: Process platform:', process.platform);
-      
+
       let result;
       try {
         logger.log('Main: Showing directory selection dialog...');
@@ -789,23 +916,23 @@ if (!isMCPMode) {
         // Fallback: try without any parent
         result = await dialog.showOpenDialog(dialogOptions);
       }
-      
+
       logger.log('Main: Dialog result:', JSON.stringify(result));
       logger.log('Main: Dialog canceled?', result.canceled);
       logger.log('Main: File paths:', result.filePaths);
       logger.log('Main: File paths length:', result.filePaths?.length);
-      
+
       if (result.canceled) {
         logger.log('Main: User explicitly cancelled the dialog');
         return null;
       }
-      
+
       if (!result.filePaths || result.filePaths.length === 0) {
         logger.log('Main: No paths returned from dialog, trying alternative approach...');
-        
+
         logger.log('Main: No paths returned from dialog - this appears to be a macOS Electron bug');
         logger.log('Main: Trying workaround with mixed file/directory selection...');
-        
+
         // Alternative approach: force both openFile and openDirectory for macOS
         const altDialogOptions: Electron.OpenDialogOptions = {
           title: 'Choose Notes Directory (Select any file in the directory you want)',
@@ -813,13 +940,13 @@ if (!isMCPMode) {
           properties: ['openFile', 'openDirectory'],
           message: 'You can select either a directory or any file within the directory you want to use'
         };
-        
+
         logger.log('Main: Trying alternative dialog options:', JSON.stringify(altDialogOptions));
-        
+
         try {
           const altResult = await dialog.showOpenDialog(altDialogOptions);
           logger.log('Main: Alternative dialog result:', JSON.stringify(altResult));
-          
+
           if (!altResult.canceled && altResult.filePaths && altResult.filePaths.length > 0) {
             result = altResult;
           } else {
@@ -831,10 +958,10 @@ if (!isMCPMode) {
           return null;
         }
       }
-      
+
       let selectedPath = result.filePaths[0];
       logger.log('Main: Path selected:', selectedPath);
-      
+
       // Check if the selected path is a file or directory
       try {
         const stats = await fs.stat(selectedPath);
@@ -852,25 +979,25 @@ if (!isMCPMode) {
         logger.error('Main: Error checking path type:', statError);
         return null;
       }
-      
+
       logger.log('Main: Final directory path:', selectedPath);
       logger.log('Main: Path exists?', await fs.access(selectedPath).then(() => true).catch(() => false));
-      
+
       // Store the selected directory
       logger.log('Main: Storing directory in electron-store...');
       const wasFirstTime = !store.get('notesDirectory');
-      
+
       // Store the directory
       store.set('notesDirectory', selectedPath);
-      
+
       // Force save the store to disk
       store.store = { ...store.store, notesDirectory: selectedPath };
-      
+
       // Verify storage
       const stored = store.get('notesDirectory');
       logger.log('Main: Directory stored and verified:', stored);
       logger.log('Main: Store file path:', store.path);
-      
+
       if (wasFirstTime) {
         logger.log('Main: First time setup - initializing storage...');
         // Initialize storage for the first time
@@ -880,7 +1007,7 @@ if (!isMCPMode) {
         // Directory change will be applied on next app start
         // User will be prompted to restart from the settings UI
       }
-      
+
       logger.log('Main: Returning selected path:', selectedPath);
       return selectedPath;
     } catch (error) {

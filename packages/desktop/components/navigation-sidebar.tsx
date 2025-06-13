@@ -1,4 +1,3 @@
-'use client'
 
 import { useState, useEffect } from 'react'
 import { ChevronDown, ChevronRight, ChevronLeft, Inbox, FileText, Pin, Clock, Hash, Plus, Settings } from 'lucide-react'
@@ -154,17 +153,29 @@ export function NavigationSidebar({ layoutState, onStateChange, onToggleCollapse
             open={pinnedExpanded}
             onOpenChange={setPinnedExpanded}
           >
-            <CollapsibleTrigger asChild>
+            <div className="flex w-full items-center">
+              <CollapsibleTrigger asChild>
+                <Button 
+                  variant="ghost"
+                  size="sm"
+                  className="w-6 h-auto p-0 flex items-center justify-center shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setPinnedExpanded(!pinnedExpanded)
+                  }}
+                >
+                  {pinnedExpanded ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
               <Button 
                 variant={layoutState.view === 'pinned-list' ? 'secondary' : 'ghost'} 
-                className="w-full justify-start grid grid-cols-[12px_20px_1fr] gap-2 items-center"
+                className="flex-1 justify-start flex items-center gap-2 px-2"
                 onClick={() => handleNavigation('pinned-list')}
               >
-                {pinnedExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
                 <Pin className="h-4 w-4" />
                 <span className="flex items-center gap-2">
                   Pinned
@@ -175,7 +186,7 @@ export function NavigationSidebar({ layoutState, onStateChange, onToggleCollapse
                   )}
                 </span>
               </Button>
-            </CollapsibleTrigger>
+            </div>
             <CollapsibleContent className="space-y-1">
               {pinnedItems.notes.map((noteFilename) => (
                 <Button
@@ -216,21 +227,33 @@ export function NavigationSidebar({ layoutState, onStateChange, onToggleCollapse
             open={recentExpanded}
             onOpenChange={setRecentExpanded}
           >
-            <CollapsibleTrigger asChild>
+            <div className="flex w-full items-center">
+              <CollapsibleTrigger asChild>
+                <Button 
+                  variant="ghost"
+                  size="sm"
+                  className="w-6 h-auto p-0 flex items-center justify-center shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setRecentExpanded(!recentExpanded)
+                  }}
+                >
+                  {recentExpanded ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
               <Button 
                 variant={layoutState.view === 'recent-notes-list' ? 'secondary' : 'ghost'} 
-                className="w-full justify-start text-left grid grid-cols-[12px_20px_1fr] gap-2 items-center"
+                className="flex-1 justify-start text-left flex items-center gap-2 px-2"
                 onClick={() => handleNavigation('recent-notes-list')}
               >
-                {recentExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
                 <Clock className="h-4 w-4" />
                 <span>Recent Notes</span>
               </Button>
-            </CollapsibleTrigger>
+            </div>
             <CollapsibleContent className="space-y-1">
               {recentNotes.map((note) => (
                 <Button
@@ -261,21 +284,33 @@ export function NavigationSidebar({ layoutState, onStateChange, onToggleCollapse
             open={conceptsExpanded}
             onOpenChange={setConceptsExpanded}
           >
-            <CollapsibleTrigger asChild>
+            <div className="flex w-full items-center">
+              <CollapsibleTrigger asChild>
+                <Button 
+                  variant="ghost"
+                  size="sm"
+                  className="w-6 h-auto p-0 flex items-center justify-center shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setConceptsExpanded(!conceptsExpanded)
+                  }}
+                >
+                  {conceptsExpanded ? (
+                    <ChevronDown className="h-3 w-3" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
               <Button 
                 variant={layoutState.view === 'concepts-list' ? 'secondary' : 'ghost'} 
-                className="w-full justify-start grid grid-cols-[12px_20px_1fr] gap-2 items-center"
+                className="flex-1 justify-start flex items-center gap-2 px-2"
                 onClick={() => handleNavigation('concepts-list')}
               >
-                {conceptsExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
                 <Hash className="h-4 w-4" />
                 <span className="truncate text-left">Concepts</span>
               </Button>
-            </CollapsibleTrigger>
+            </div>
             <CollapsibleContent className="space-y-1">
               {concepts.slice(0, 10).map((concept) => (
                 <Button

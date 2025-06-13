@@ -1,11 +1,10 @@
-'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X, Plus } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
-import type { Note } from '../../../shared/src/types'
+import type { Note } from '@notes-app/shared'
 
 export interface SearchItem {
   id: string
@@ -114,10 +113,6 @@ export function LinkSearch({
     }, 200)
   }
 
-  const clearSearch = () => {
-    onSearchChange('')
-    setShowResults(false)
-  }
 
   // Create dropdown content
   const dropdownContent = showResults && (
@@ -131,7 +126,7 @@ export function LinkSearch({
       }}
     >
       {items.length > 0 ? (
-        items.slice(0, maxItems).map((item, index) => (
+        items.slice(0, maxItems).map((item) => (
           <Button
             key={item.id}
             variant="ghost"

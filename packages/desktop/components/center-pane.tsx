@@ -1,9 +1,7 @@
-'use client'
 
 import { InboxProcessor } from './inbox-processor'
 import { NotesList } from './notes-list'
 import { NoteEditor } from './note-editor-new'
-import { ConceptEditor } from './concept-editor'
 import { ConceptNotesList } from './concept-notes-list'
 import { SettingsPage } from './settings-page'
 import { RecentNotesList } from './recent-notes-list'

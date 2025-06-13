@@ -1,4 +1,3 @@
-'use client'
 
 import { useState } from 'react'
 import { ScrollArea } from './ui/scroll-area'
@@ -17,12 +16,16 @@ interface ConceptsListProps {
   onConceptSelect: (conceptName: string) => void
 }
 
-export function ConceptsList({ layoutState, onConceptSelect }: ConceptsListProps) {
+export function ConceptsList({ onConceptSelect }: ConceptsListProps) {
   const [newConceptName, setNewConceptName] = useState('')
   const [createConceptDialogOpen, setCreateConceptDialogOpen] = useState(false)
   
   // Data from provider
   const { concepts, loading, createConcept, deleteConcept } = useConcepts()
+
+  const handleDeleteConcept = async (conceptName: string): Promise<void> => {
+    await deleteConcept(conceptName)
+  }
 
   // Search functionality
   const conceptSearch = useSearch({
@@ -51,10 +54,6 @@ export function ConceptsList({ layoutState, onConceptSelect }: ConceptsListProps
     }
   }
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return ''
-    return new Date(dateString).toLocaleDateString()
-  }
 
   if (loading) {
     return (
@@ -144,13 +143,12 @@ export function ConceptsList({ layoutState, onConceptSelect }: ConceptsListProps
                 icon={Hash}
                 title="No concepts yet"
                 description="Create your first concept to organize your notes"
-                action={
-                  <Button onClick={() => setCreateConceptDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Concept
-                  </Button>
-                }
-              />
+              >
+                <Button onClick={() => setCreateConceptDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Concept
+                </Button>
+              </EmptyState>
             ) : (
               <EmptyState
                 icon={Search}
@@ -164,7 +162,7 @@ export function ConceptsList({ layoutState, onConceptSelect }: ConceptsListProps
                 key={concept.name}
                 concept={concept}
                 onSelect={onConceptSelect}
-                onDelete={deleteConcept}
+                onDelete={handleDeleteConcept}
               />
             ))
           )}

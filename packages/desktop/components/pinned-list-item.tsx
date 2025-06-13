@@ -1,4 +1,3 @@
-'use client'
 
 import { ItemCard, ItemCardAction } from './ui/item-card'
 import { usePinState } from '../hooks/use-pin-state'
@@ -67,9 +66,8 @@ export function PinnedListItem({
       title={title}
       description={description}
       timestamp={data.metadata.modified}
-      concepts={concepts}
+      badges={type === 'note' ? ['Note', ...(concepts || [])] : ['Concept']}
       icon={type === 'note' ? FileText : Hash}
-      badge={type === 'note' ? 'Note' : 'Concept'}
       actions={actions}
       onClick={() => {
         if (type === 'note') {

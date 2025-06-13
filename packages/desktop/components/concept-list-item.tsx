@@ -1,4 +1,3 @@
-'use client'
 
 import { useState } from 'react'
 import { ItemCard, ItemCardAction } from './ui/item-card'
@@ -58,8 +57,7 @@ export function ConceptListItem({ concept, onSelect, onDelete }: ConceptListItem
     actions.push({
       icon: Trash2,
       label: 'Delete concept',
-      onClick: (e) => {
-        e?.stopPropagation()
+      onClick: () => {
         setShowDeleteDialog(true)
       },
       variant: 'destructive'
@@ -72,7 +70,7 @@ export function ConceptListItem({ concept, onSelect, onDelete }: ConceptListItem
         title={`#${concept.name}`}
         description={concept.content.substring(0, 150) + (concept.content.length > 150 ? '...' : '')}
         timestamp={concept.metadata.modified}
-        badge={linkedNotesCount > 0 ? `${linkedNotesCount} note${linkedNotesCount !== 1 ? 's' : ''}` : undefined}
+        badges={linkedNotesCount > 0 ? [`${linkedNotesCount} note${linkedNotesCount !== 1 ? 's' : ''}`] : []}
         icon={Hash}
         actions={actions}
         onClick={() => onSelect(concept.name)}

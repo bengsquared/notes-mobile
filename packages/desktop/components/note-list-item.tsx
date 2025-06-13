@@ -1,9 +1,8 @@
-'use client'
 
 import { ItemCard, ItemCardAction } from './ui/item-card'
 import { usePinState } from '../hooks/use-pin-state'
 import { FileText, Trash2, Pin, PinOff } from 'lucide-react'
-import type { Note } from '../../../shared/src/types'
+import type { Note } from '@notes-app/shared'
 
 interface NoteListItemProps {
   note: Note
@@ -39,7 +38,7 @@ export function NoteListItem({ note, onSelect, onDelete }: NoteListItemProps) {
       title={note.metadata.title || note.filename.replace('.txt', '')}
       description={note.content.substring(0, 150) + (note.content.length > 150 ? '...' : '')}
       timestamp={note.metadata.modified}
-      concepts={note.metadata.concepts}
+      badges={note.metadata.concepts || []}
       icon={FileText}
       actions={actions}
       onClick={() => onSelect(note.filename)}

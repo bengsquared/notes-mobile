@@ -2,9 +2,9 @@
 
 import { useEffect, useRef, forwardRef } from 'react'
 import { cn } from '../../lib/utils'
-import { useUndoRedo, useAutosave, useErrorHandler } from '@notes-app/shared'
+import { useUndoRedo, useAutosave } from '@notes-app/shared'
 
-interface EnhancedTextareaProps extends React.ComponentProps<'textarea'> {
+interface EnhancedTextareaProps extends Omit<React.ComponentProps<'textarea'>, 'onChange' | 'value'> {
   value: string
   onChange: (value: string) => void
   onSave?: (value: string) => Promise<void>
@@ -35,7 +35,7 @@ export const EnhancedTextarea = forwardRef<HTMLTextAreaElement, EnhancedTextarea
     ...props
   }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null)
-    const mergedRef = ref || textareaRef
+    const mergedRef = (ref as React.RefObject<HTMLTextAreaElement>) || textareaRef
 
     // Undo/redo functionality
     const undoRedo = useUndoRedo(value, maxHistorySize)
@@ -97,7 +97,7 @@ export const EnhancedTextarea = forwardRef<HTMLTextAreaElement, EnhancedTextarea
 
       const handleKeyDown = (e: KeyboardEvent) => {
         // Only handle if textarea is focused
-        if (document.activeElement !== mergedRef.current) return
+        if (document.activeElement !== (mergedRef as React.RefObject<HTMLTextAreaElement>).current) return
 
         if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
           e.preventDefault()

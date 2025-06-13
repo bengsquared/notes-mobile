@@ -1,10 +1,8 @@
-'use client'
 
 import React, { useState, useEffect } from 'react'
 import { ScrollArea } from './ui/scroll-area'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
-import { Textarea } from './ui/textarea'
 import { EnhancedTextarea } from './ui/enhanced-textarea'
 import { Separator } from './ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog'
@@ -50,7 +48,6 @@ export function UnifiedContextSidebar({
   React.useEffect(() => {
     console.log('🎯 UnifiedContextSidebar - currentItem changed:', currentItem);
     if (currentItem) {
-      console.log('🎯 UnifiedContextSidebar - currentItem type:', currentItem.location || 'concept');
       console.log('🎯 UnifiedContextSidebar - currentItem metadata:', currentItem.metadata);
       if ('name' in currentItem) {
         console.log('🎯 UnifiedContextSidebar - Concept relatedConcepts:', (currentItem as Concept).metadata.relatedConcepts);
