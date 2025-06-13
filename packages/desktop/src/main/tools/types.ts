@@ -25,6 +25,7 @@ export interface NotesStorage {
   searchNotes(query: string, options?: any): Promise<any[]>;
   parseContent(content: string): any;
   getRecentNotes(limit?: number): Promise<any[]>;
+  promoteIdeaToNote(ideaFilename: string, title: string, concepts?: string[]): Promise<any>;
 }
 
 export type CreateSuccessResponse = (data: any) => any;

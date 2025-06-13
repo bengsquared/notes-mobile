@@ -112,7 +112,7 @@
       "gatekeeperAssess": false
     },
     "win": {
-      "icon": "resources/logo.png",
+      "icon": "resources/icon.ico",
       "target": "nsis"
     },
     "linux": {

@@ -74,14 +74,23 @@ export async function getConceptRelationships(notesStorage: NotesStorage, concep
   const linkedNotes = await notesStorage.getNotesForConcept(conceptName);
   // Get concepts that co-occur in linked notes
   const conceptsInLinkedNotes: string[] = [];
+  const validLinkedNotes: string[] = [];
+  
   for (const noteFilename of linkedNotes) {
-    const note = await notesStorage.loadNote(noteFilename);
-    if (note.metadata.concepts) {
-      conceptsInLinkedNotes.push(...note.metadata.concepts.filter((c: string) => c !== conceptName));
+    try {
+      const note = await notesStorage.loadNote(noteFilename);
+      validLinkedNotes.push(noteFilename);
+      if (note.metadata.concepts) {
+        conceptsInLinkedNotes.push(...note.metadata.concepts.filter((c: string) => c !== conceptName));
+      }
+    } catch (error) {
+      // Skip notes that no longer exist (e.g., after rename)
+      console.warn(`Note ${noteFilename} linked to concept ${conceptName} not found, skipping`);
     }
   }
+  
   const relationships = {
-    linkedNotes,
+    linkedNotes: validLinkedNotes,
     relatedConcepts: concept.metadata.relatedConcepts || [],
     conceptsInLinkedNotes: [...new Set(conceptsInLinkedNotes)],
   };

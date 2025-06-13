@@ -34,7 +34,8 @@ import {
   captureIdea,
   listInboxNotes,
   suggestInboxProcessing,
-  processInboxItem
+  processInboxItem,
+  promoteIdeaToNote
 } from './inbox-tools';
 import {
   listMediaForNote,
@@ -45,7 +46,9 @@ import {
 import {
   searchKnowledge,
   getKnowledgeStats,
-  analyzeNoteContent
+  analyzeNoteContent,
+  getRecentNotes,
+  getSimilarNotes
 } from './search-tools';
 
 export * from './types';
@@ -197,6 +200,7 @@ export const toolLogicRegistry: Record<string, ToolLogicFn> = {
   list_inbox_notes: listInboxNotes,
   suggest_inbox_processing: suggestInboxProcessing,
   process_inbox_item: processInboxItem,
+  promote_idea_to_note: promoteIdeaToNote,
   // Media
   list_media_for_note: listMediaForNote,
   save_media: saveMedia,
@@ -206,4 +210,6 @@ export const toolLogicRegistry: Record<string, ToolLogicFn> = {
   search_knowledge: searchKnowledge,
   get_knowledge_stats: getKnowledgeStats,
   analyze_note_content: analyzeNoteContent,
+  get_recent_notes: getRecentNotes,
+  get_similar_notes: getSimilarNotes,
 };

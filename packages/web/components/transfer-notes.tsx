@@ -12,7 +12,7 @@ import QRCodeGenerator from "@/components/qr-code"
 import ExportNotes from "@/components/export-notes"
 
 type TransferMode = "idle" | "sending" | "receiving" | "connecting"
-type TransferStatus = "waiting" | "connected" | "transferring" | "completed" | "error"
+type TransferStatus = "waiting" | "connecting" | "connected" | "transferring" | "completed" | "error"
 
 interface TransferData {
   type: "notes-transfer"
@@ -78,8 +78,12 @@ function TransferToDesktop() {
     setError('')
 
     try {
+      // Configure RPC URL to match desktop environment logic (8081 dev, 8080 prod)
+      const rpcPort = process.env.NODE_ENV === 'development' ? 8081 : 8080;
+      const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || `http://localhost:${rpcPort}/rpc`;
+      
       // Test connection AND validate the PIN by sending an empty notes array
-      const testResponse = await fetch('http://localhost:8080/rpc', {
+      const testResponse = await fetch(RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -127,7 +131,11 @@ function TransferToDesktop() {
         location: note.location, // Include location data if available
       }))
 
-      const response = await fetch('http://localhost:8080/rpc', {
+      // Use the same RPC URL configuration to match desktop environment logic
+      const rpcPort = process.env.NODE_ENV === 'development' ? 8081 : 8080;
+      const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || `http://localhost:${rpcPort}/rpc`;
+      
+      const response = await fetch(RPC_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

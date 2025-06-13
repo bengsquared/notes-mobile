@@ -178,10 +178,39 @@ export async function suggestInboxProcessing(notesStorage: NotesStorage, createS
   return createSuccessResponse(result);
 }
 
-export async function processInboxItem(notesStorage: NotesStorage, createSuccessResponse: CreateSuccessResponse, filename: string, options: any) {
+export async function promoteIdeaToNote(notesStorage: NotesStorage, ideaFilename: string, title: string, concepts: string[] = [], createSuccessResponse?: CreateSuccessResponse) {
+  try {
+    const promotedNote = await notesStorage.promoteIdeaToNote(ideaFilename, title, concepts);
+    
+    const result = {
+      filename: promotedNote.filename,
+      title: promotedNote.metadata.title,
+      concepts: promotedNote.metadata.concepts || [],
+      created: promotedNote.metadata.created,
+      message: `Successfully promoted idea to structured note: ${promotedNote.filename}`
+    };
+    
+    return createSuccessResponse ? createSuccessResponse(result) : {
+      content: [{
+        type: 'text',
+        text: JSON.stringify(result, null, 2)
+      }]
+    };
+  } catch (error) {
+    const errorMessage = `Error promoting idea to note: ${error instanceof Error ? error.message : String(error)}`;
+    return createSuccessResponse ? createSuccessResponse({ error: errorMessage }) : {
+      content: [{
+        type: 'text',
+        text: errorMessage
+      }]
+    };
+  }
+}
+
+export async function processInboxItem(notesStorage: NotesStorage, filename: string, options: any, createSuccessResponse?: CreateSuccessResponse) {
   const inboxNote = await notesStorage.loadNote(filename);
   switch (options.action) {
-    case 'create_note':
+    case 'create_note': {
       if (!options.targetFilename) throw new Error('targetFilename required for create_note action');
       await notesStorage.saveNote(options.targetFilename, inboxNote.content, inboxNote.metadata, 'notes');
       await notesStorage.deleteNote(filename);
@@ -194,12 +223,14 @@ export async function processInboxItem(notesStorage: NotesStorage, createSuccess
         };
         await notesStorage.saveNote(options.targetFilename, inboxNote.content, metadata);
       }
-      return {
+      const result = { message: `Moved inbox item to ${options.targetFilename}`, targetFilename: options.targetFilename };
+      return createSuccessResponse ? createSuccessResponse(result) : {
         content: [
-          { type: 'text', text: `Moved inbox item to ${options.targetFilename}` },
+          { type: 'text', text: JSON.stringify(result, null, 2) },
         ],
       };
-    case 'merge_with_note':
+    }
+    case 'merge_with_note': {
       if (!options.targetFilename) throw new Error('targetFilename required for merge_with_note action');
       const targetNote = await notesStorage.loadNote(options.targetFilename);
       const newContent = options.appendContent
@@ -216,18 +247,22 @@ export async function processInboxItem(notesStorage: NotesStorage, createSuccess
         modified: new Date().toISOString()
       });
       await notesStorage.deleteNote(filename);
-      return {
+      const result = { message: `Merged inbox item into ${options.targetFilename}`, targetFilename: options.targetFilename };
+      return createSuccessResponse ? createSuccessResponse(result) : {
         content: [
-          { type: 'text', text: `Merged inbox item into ${options.targetFilename}` },
+          { type: 'text', text: JSON.stringify(result, null, 2) },
         ],
       };
-    case 'delete':
+    }
+    case 'delete': {
       await notesStorage.deleteNote(filename);
-      return {
+      const result = { message: `Deleted inbox item ${filename}`, filename };
+      return createSuccessResponse ? createSuccessResponse(result) : {
         content: [
-          { type: 'text', text: `Deleted inbox item ${filename}` },
+          { type: 'text', text: JSON.stringify(result, null, 2) },
         ],
       };
+    }
     default:
       throw new Error('Unknown action for processInboxItem');
   }

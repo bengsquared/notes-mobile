@@ -18,8 +18,8 @@ function getAppIcon(): string {
   if (process.platform === 'darwin') {
     return join(resourcesPath, 'resources/icon.icns');
   } else if (process.platform === 'win32') {
-    // Use logo.png for Windows since we don't have .ico
-    return join(resourcesPath, 'resources/logo.png');
+    // Use .ico file for Windows
+    return join(resourcesPath, 'resources/icon.ico');
   } else {
     return join(resourcesPath, 'resources/logo.png');
   }

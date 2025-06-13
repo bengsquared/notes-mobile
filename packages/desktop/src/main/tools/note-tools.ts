@@ -291,7 +291,7 @@ export async function getNoteRelationships(notesStorage: any, filename: string, 
   return createSuccessResponse(relationships);
 }
 
-export async function enrichNote(notesStorage: NotesStorage, filename: string, additionalContent: string, newConcepts: string[] = [], newLinks: string[] = [], createSuccessResponse: CreateSuccessResponse) {
+export async function enrichNote(notesStorage: NotesStorage, filename: string, additionalContent?: string, newConcepts: string[] = [], newLinks: string[] = [], createSuccessResponse?: CreateSuccessResponse) {
   const note = await notesStorage.loadNote(filename);
   
   // Merge content
@@ -317,12 +317,19 @@ export async function enrichNote(notesStorage: NotesStorage, filename: string, a
   
   await notesStorage.saveNote(filename, enrichedContent, updatedMetadata);
   
-  return createSuccessResponse({
+  const result = {
     filename,
     addedConcepts: newConcepts.filter(c => !existingConcepts.includes(c)),
     addedLinks: newLinks.filter(l => !existingLinks.includes(l)),
     contentAdded: !!additionalContent
-  });
+  };
+  
+  return createSuccessResponse ? createSuccessResponse(result) : {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(result, null, 2)
+    }]
+  };
 }
 
 export async function mergeNotes(notesStorage: any, sourceFilenames: string[], targetFilename: string, options: { title?: string; mergeStrategy: 'append' | 'sections' | 'chronological'; deleteSource: boolean; }) {

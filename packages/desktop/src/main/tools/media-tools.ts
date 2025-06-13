@@ -82,35 +82,47 @@ export const mediaTools: ToolDefinition[] = [
 ];
 
 // Tool logic implementations
-export async function listMediaForNote(notesStorage: any, createSuccessResponse: Function, noteFilename: string) {
+export async function listMediaForNote(notesStorage: NotesStorage, noteFilename: string, createSuccessResponse?: CreateSuccessResponse) {
   const mediaFiles = await notesStorage.listMediaForNote(noteFilename);
-  return createSuccessResponse(mediaFiles);
+  return createSuccessResponse ? createSuccessResponse(mediaFiles) : {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(mediaFiles, null, 2)
+    }]
+  };
 }
 
-export async function saveMedia(notesStorage: any, filename: string, data: string, mimeType: string) {
+export async function saveMedia(notesStorage: NotesStorage, filename: string, data: string, mimeType: string, createSuccessResponse?: CreateSuccessResponse) {
   await notesStorage.saveMedia(filename, data, mimeType);
-  return {
+  const result = { message: `Successfully saved media file: ${filename}`, filename };
+  return createSuccessResponse ? createSuccessResponse(result) : {
     content: [
       {
         type: 'text',
-        text: `Successfully saved media file: ${filename}`,
+        text: JSON.stringify(result, null, 2),
       },
     ],
   };
 }
 
-export async function loadMedia(notesStorage: NotesStorage, createSuccessResponse: CreateSuccessResponse, filename: string) {
+export async function loadMedia(notesStorage: NotesStorage, filename: string, createSuccessResponse?: CreateSuccessResponse) {
   const media = await notesStorage.loadMedia(filename);
-  return createSuccessResponse(media);
+  return createSuccessResponse ? createSuccessResponse(media) : {
+    content: [{
+      type: 'text',
+      text: JSON.stringify(media, null, 2)
+    }]
+  };
 }
 
-export async function deleteMedia(notesStorage: NotesStorage, filename: string) {
+export async function deleteMedia(notesStorage: NotesStorage, filename: string, createSuccessResponse?: CreateSuccessResponse) {
   await notesStorage.deleteMedia(filename);
-  return {
+  const result = { message: `Successfully deleted media file: ${filename}`, filename };
+  return createSuccessResponse ? createSuccessResponse(result) : {
     content: [
       {
         type: 'text',
-        text: `Successfully deleted media file: ${filename}`,
+        text: JSON.stringify(result, null, 2),
       },
     ],
   };
