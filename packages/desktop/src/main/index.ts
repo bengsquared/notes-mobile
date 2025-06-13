@@ -6,6 +6,7 @@ import { promises as fs } from 'fs';
 import { NotesStorage } from '../lib/storage';
 import { IPCHandlers } from './ipc-handlers';
 import { NotesMCPServer } from './mcp-server';
+import { WebRTCHandler } from './webrtc-handler';
 import os from 'os';
 import { Bonjour } from 'bonjour-service';
 
@@ -76,17 +77,8 @@ let storage: NotesStorage | null = null;
 let ipcHandlers: IPCHandlers | null = null;
 let mcpServer: NotesMCPServer | null = null;
 let bonjour: any = null;
-let rpcServer: any = null;
-
-// WebRTC connections by code
-let webrtcConnections = new Map<string, {
-  peerConnection: any,
-  code: string,
-  timestamp: number
-}>();
-
-// Store for pending transfer codes (maps code to notes data)
-const pendingTransfers = new Map<string, { notes: any[], timestamp: number }>();
+let webrtcHandler: WebRTCHandler | null = null;
+let signalingServer: any = null;
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -353,7 +345,20 @@ function validatePIN(pin: string): boolean {
   return currentPIN !== null && currentPIN === pin;
 }
 
-function setupRPCServer() {
+// Initialize WebRTC transfer system
+function setupWebRTCTransfer() {
+  // Initialize WebRTC handler for receiving notes
+  webrtcHandler = new WebRTCHandler((notes: any[]) => {
+    handleReceivedNotes(notes);
+  });
+
+  // Set up simple signaling server for WebRTC connections
+  setupSignalingServer();
+  
+  logger.log('🌐 WebRTC transfer system initialized');
+}
+
+function setupSignalingServer() {
   // Get local IP address
   const getLocalIP = () => {
     const interfaces = os.networkInterfaces();
@@ -372,7 +377,7 @@ function setupRPCServer() {
 
   const localIP = getLocalIP();
 
-  rpcServer = createServer((req: any, res: any) => {
+  signalingServer = createServer((req: any, res: any) => {
     // Set CORS headers for cross-origin requests from web apps
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -392,12 +397,14 @@ function setupRPCServer() {
         version: '1.0.0',
         hostname: os.hostname(),
         ip: localIP,
-        hasActivePIN: currentPIN !== null
+        hasActivePIN: currentPIN !== null,
+        supportsWebRTC: true
       }));
       return;
     }
 
-    if (req.method === 'POST' && req.url === '/rpc') {
+    // Handle WebRTC signaling
+    if (req.method === 'POST' && req.url === '/signal') {
       let body = '';
       req.on('data', (chunk: any) => {
         body += chunk.toString();
@@ -405,179 +412,42 @@ function setupRPCServer() {
       req.on('end', async () => {
         try {
           const data = JSON.parse(body);
-          logger.log(`📥 Received RPC request body: ${body}`);
-          logger.log(`🔑 Current PIN state: ${currentPIN ? `Active (${currentPIN})` : 'None'}`);
-          logger.log(`📨 RPC Request: ${data.method} (ID: ${data.id})`);
+          logger.log(`📡 Received signaling message: ${data.type}`);
 
-          // Handle ping method
-          if (data.method === 'ping') {
-            logger.log(`🏓 Ping received, responding with pong`);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', result: 'pong', id: data.id }));
-          }
-          // Handle getTransferPIN method - generates and returns a new PIN
-          else if (data.method === 'getTransferPIN') {
-            const pin = generateTransferPIN();
-            logger.log(`🔢 Generated new transfer PIN: ${pin} (expires in 5 minutes)`);
-            mainWindow?.webContents.send('transfer-pin-generated', pin);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', result: { pin, expiresIn: 300 }, id: data.id }));
-          }
-          // Handle direct transfer with connection code
-          else if (data.method === 'transferNotesWithCode' && data.params?.code && data.params?.notes !== undefined) {
-            const { code, notes } = data.params;
-            logger.log(`🔐 Transfer request with code: ${code}, notes: ${notes.length}, current PIN: ${currentPIN}`);
-
-            // Check if code matches current PIN
-            if (currentPIN !== code) {
-              logger.error(`❌ Invalid connection code provided: ${code} (expected: ${currentPIN})`);
-              res.writeHead(401, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32002, message: 'Invalid connection code' }, id: data.id }));
-              return;
-            }
-
-            try {
-              // If notes array is empty, this is just a validation request
-              if (notes.length === 0) {
-                logger.log(`✅ Connection code ${code} validated successfully (validation request)`);
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ jsonrpc: '2.0', result: { success: true, validated: true }, id: data.id }));
-                return;
-              }
-
-              logger.log(`📝 Processing transfer of ${notes.length} notes with code ${code}`);
-
-              // Save notes as ideas
-              if (storage) {
-                logger.log(`💾 Saving ${notes.length} notes as ideas to storage`);
-                let savedCount = 0;
-                for (const note of notes) {
-                  try {
-                    // Create a title from the note content (first 50 chars, cleaned up)
-                    const title = note.content
-                      .trim()
-                      .substring(0, 50)
-                      .replace(/[\r\n]+/g, ' ')
-                      .trim();
-
-                    // Prepare the content with location info if available
-                    let enrichedContent = note.content;
-                    if (note.location && note.location.lat && note.location.lng) {
-                      const { lat, lng } = note.location;
-                      const mapsUrl = `https://maps.google.com/maps?q=${lat},${lng}`;
-                      const locationInfo = `\n\n📍 **Location**: [${lat.toFixed(6)}, ${lng.toFixed(6)}](${mapsUrl})`;
-                      enrichedContent = note.content + locationInfo;
-                      logger.log(`  📍 Adding location data: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-                    }
-
-                    await storage.createIdea(enrichedContent, {
-                      title: title || 'Transferred note',
-                      created: note.createdAt || new Date().toISOString(),
-                      processed: false
-                    });
-                    savedCount++;
-                    logger.log(`  ✓ Saved note ${savedCount}/${notes.length}: "${title}"`);
-                  } catch (error) {
-                    logger.error(`  ❌ Error saving note ${savedCount + 1}/${notes.length}:`, error);
-                  }
-                }
-                logger.log(`💾 Successfully saved ${savedCount}/${notes.length} notes as ideas`);
-              } else {
-                logger.error(`❌ Storage not available! Cannot save notes.`);
-              }
-
-              // Process notes with media for any additional handling
-              const processedNotes = notes.map((note: any) => ({
-                ...note,
-                media: note.media || []
-              }));
-
-              logger.log(`📢 Sending notes-received event to renderer process`);
-              mainWindow?.webContents.send('notes-received', processedNotes);
-
-              // Clear PIN after successful transfer (only for actual transfers, not validation)
-              logger.log(`🧹 Clearing PIN after successful transfer`);
-              currentPIN = null;
-              if (pinExpiryTimeout) {
-                clearTimeout(pinExpiryTimeout);
-                pinExpiryTimeout = null;
-              }
-
-              logger.log(`✅ Transfer completed successfully: ${notes.length} notes received`);
+          if (data.type === 'getConnectionCode' && data.pin === currentPIN) {
+            // Generate connection code for WebRTC transfer
+            const code = webrtcHandler?.generateConnectionCode();
+            if (code) {
+              logger.log(`🔢 Generated WebRTC connection code: ${code}`);
               res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', result: { success: true, notesReceived: notes.length }, id: data.id }));
-
-            } catch (error) {
-              logger.error(`❌ Error processing transfer:`, error);
-              res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Failed to process transfer' }, id: data.id }));
-            }
-          }
-          // Handle transferNotes method with PIN validation
-          else if (data.method === 'transferNotes' && data.params?.notes) {
-            // Check if PIN is provided and valid
-            if (!data.params.pin) {
-              res.writeHead(401, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32001, message: 'PIN required' }, id: data.id }));
-              return;
-            }
-
-            if (!validatePIN(data.params.pin)) {
-              res.writeHead(401, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32002, message: 'Invalid or expired PIN' }, id: data.id }));
-              return;
-            }
-
-            logger.log('Received notes from web app via PIN transfer');
-
-            // Save each note as an idea (since they come from web/mobile)
-            if (storage) {
-              logger.log(`Saving ${data.params.notes.length} notes as ideas`);
-
-              for (let i = 0; i < data.params.notes.length; i++) {
-                const note = data.params.notes[i];
-                try {
-                  // Save as idea (unprocessed thought from web/mobile)
-                  await storage.createIdea(note.content, {
-                    created: note.createdAt || new Date().toISOString(),
-                    processed: false
-                  });
-                } catch (error) {
-                  logger.error(`Error saving note ${i + 1} as idea:`, error);
-                }
-              }
-
-              logger.log('Finished saving all notes as ideas');
+              res.end(JSON.stringify({ success: true, code }));
             } else {
-              logger.error('Storage is not available! Cannot save notes.');
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Failed to generate connection code' }));
             }
-
-            // Process notes with media for any additional handling
-            const processedNotes = data.params.notes.map((note: any) => ({
-              ...note,
-              media: note.media || []
-            }));
-
-            mainWindow?.webContents.send('notes-received', processedNotes);
-
-            // Clear PIN after successful transfer
-            currentPIN = null;
-            if (pinExpiryTimeout) {
-              clearTimeout(pinExpiryTimeout);
-              pinExpiryTimeout = null;
+          } else if (data.type === 'offer' && data.code && webrtcHandler) {
+            // Handle WebRTC offer
+            const answer = await webrtcHandler.handleOffer(data.code, data.offer);
+            if (answer) {
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, answer }));
+            } else {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'Invalid connection code or failed to create answer' }));
             }
-
+          } else if (data.type === 'iceCandidate' && data.code && webrtcHandler) {
+            // Handle ICE candidate
+            await webrtcHandler.handleIceCandidate(data.code, data.candidate);
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', result: { success: true, notesReceived: data.params.notes.length }, id: data.id }));
+            res.end(JSON.stringify({ success: true }));
           } else {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32601, message: 'Method not found' }, id: data.id }));
+            res.end(JSON.stringify({ error: 'Invalid request or missing/invalid PIN' }));
           }
         } catch (error) {
-          logger.error('❌ RPC parsing/processing error:', error);
-          logger.error('📋 Request body that caused error:', body);
+          logger.error('❌ Signaling error:', error);
           res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null }));
+          res.end(JSON.stringify({ error: 'Internal server error' }));
         }
       });
     } else {
@@ -586,11 +456,11 @@ function setupRPCServer() {
     }
   });
 
-  // Use different ports for dev/prod to avoid conflicts
-  const rpcPort = isDev ? 8081 : 8080;
+  // Use same ports as before for compatibility
+  const signalingPort = isDev ? 8081 : 8080;
 
-  rpcServer.listen(rpcPort, '0.0.0.0', () => {
-    logger.log(`🚀 RPC server listening on ${localIP}:${rpcPort}`);
+  signalingServer.listen(signalingPort, '0.0.0.0', () => {
+    logger.log(`🚀 WebRTC signaling server listening on ${localIP}:${signalingPort}`);
     logger.log(`🔑 Initial PIN state: ${currentPIN ? `Active (${currentPIN})` : 'None'}`);
 
     // Set up mDNS service advertisement
@@ -598,15 +468,16 @@ function setupRPCServer() {
       bonjour = new Bonjour();
     }
 
-    // Advertise the notes transfer service
+    // Advertise the notes transfer service with WebRTC support
     const service = bonjour.publish({
       name: `Notes-${os.hostname()}${isDev ? '-dev' : ''}`,
       type: 'notes-transfer',
-      port: rpcPort,
+      port: signalingPort,
       txt: {
         version: '1.0.0',
         hostname: os.hostname(),
-        ip: localIP
+        ip: localIP,
+        protocol: 'webrtc'
       }
     });
 
@@ -620,6 +491,73 @@ function setupRPCServer() {
       logger.error('mDNS service error:', err);
     });
   });
+}
+
+// Handle notes received via WebRTC
+async function handleReceivedNotes(notes: any[]) {
+  try {
+    logger.log(`📝 Processing transfer of ${notes.length} notes via WebRTC`);
+
+    // Save notes as ideas
+    if (storage) {
+      logger.log(`💾 Saving ${notes.length} notes as ideas to storage`);
+      let savedCount = 0;
+      for (const note of notes) {
+        try {
+          // Create a title from the note content (first 50 chars, cleaned up)
+          const title = note.content
+            .trim()
+            .substring(0, 50)
+            .replace(/[\r\n]+/g, ' ')
+            .trim();
+
+          // Prepare the content with location info if available
+          let enrichedContent = note.content;
+          if (note.location && note.location.lat && note.location.lng) {
+            const { lat, lng } = note.location;
+            const mapsUrl = `https://maps.google.com/maps?q=${lat},${lng}`;
+            const locationInfo = `\n\n📍 **Location**: [${lat.toFixed(6)}, ${lng.toFixed(6)}](${mapsUrl})`;
+            enrichedContent = note.content + locationInfo;
+            logger.log(`  📍 Adding location data: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+          }
+
+          await storage.createIdea(enrichedContent, {
+            title: title || 'Transferred note',
+            created: note.createdAt || new Date().toISOString(),
+            processed: false
+          });
+          savedCount++;
+          logger.log(`  ✓ Saved note ${savedCount}/${notes.length}: "${title}"`);
+        } catch (error) {
+          logger.error(`  ❌ Error saving note ${savedCount + 1}/${notes.length}:`, error);
+        }
+      }
+      logger.log(`💾 Successfully saved ${savedCount}/${notes.length} notes as ideas`);
+    } else {
+      logger.error(`❌ Storage not available! Cannot save notes.`);
+    }
+
+    // Process notes with media for any additional handling
+    const processedNotes = notes.map((note: any) => ({
+      ...note,
+      media: note.media || []
+    }));
+
+    logger.log(`📢 Sending notes-received event to renderer process`);
+    mainWindow?.webContents.send('notes-received', processedNotes);
+
+    // Clear PIN after successful transfer
+    logger.log(`🧹 Clearing PIN after successful transfer`);
+    currentPIN = null;
+    if (pinExpiryTimeout) {
+      clearTimeout(pinExpiryTimeout);
+      pinExpiryTimeout = null;
+    }
+
+    logger.log(`✅ WebRTC transfer completed successfully: ${notes.length} notes received`);
+  } catch (error) {
+    logger.error(`❌ Error processing WebRTC transfer:`, error);
+  }
 }
 
 // Always run full Electron app, but skip initial window creation in MCP mode
@@ -646,11 +584,11 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Initialize storage and RPC server in background
+  // Initialize storage and WebRTC transfer system in background
   if (!isMCPMode) {
     Promise.all([
       initializeStorage(),
-      setupRPCServer()
+      setupWebRTCTransfer()
     ]).catch(error => {
       logger.error('Background initialization failed:', error);
     });
@@ -681,9 +619,14 @@ app.on('before-quit', () => {
     bonjour = null;
   }
 
-  if (rpcServer) {
-    rpcServer.close();
-    rpcServer = null;
+  if (signalingServer) {
+    signalingServer.close();
+    signalingServer = null;
+  }
+  
+  if (webrtcHandler) {
+    webrtcHandler.cleanup();
+    webrtcHandler = null;
   }
 
   if (pinExpiryTimeout) {

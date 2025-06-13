@@ -1,6 +1,4 @@
 ---
-linkedNotes: [productivity-systems.txt]
-created: 2025-06-06T18:10:09.448Z
-modified: 2025-06-06T18:10:09.448Z
+links: [mcp-integration-testing-results.txt]
 ---
 

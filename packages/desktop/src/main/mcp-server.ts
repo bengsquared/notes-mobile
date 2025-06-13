@@ -88,6 +88,121 @@ export class NotesMCPServer {
     };
   }
 
+  private async callToolWithProperArgs(toolName: string, logic: any, args: any, deps: any) {
+    const createSuccessResponse = deps.createSuccessResponse;
+    const notesStorage = deps.notesStorage;
+
+    // Handle each tool with its specific parameter mapping
+    switch (toolName) {
+      case 'promote_idea_to_note':
+        return await logic(notesStorage, args.ideaFilename, args.title, args.concepts || [], createSuccessResponse);
+      
+      case 'enrich_note':
+        return await logic(notesStorage, args.filename, args.additionalContent, args.newConcepts || [], args.newLinks || [], createSuccessResponse);
+      
+      case 'capture_idea':
+        return await logic(notesStorage, args.content, createSuccessResponse);
+      
+      case 'read_note':
+        return await logic(notesStorage, args.filename, createSuccessResponse);
+      
+      case 'get_note_relationships':
+        return await logic(notesStorage, args.filename, createSuccessResponse);
+      
+      case 'list_all_notes':
+        return await logic(notesStorage, createSuccessResponse);
+      
+      case 'list_inbox_notes':
+        return await logic(notesStorage, createSuccessResponse);
+        
+      case 'suggest_inbox_processing':
+        return await logic(notesStorage, createSuccessResponse);
+      
+      case 'merge_notes':
+        return await logic(notesStorage, args.sourceFilenames, args.targetFilename, {
+          title: args.title,
+          mergeStrategy: args.mergeStrategy || 'sections',
+          deleteSource: args.deleteSource || false
+        });
+      
+      case 'rename_note':
+        return await logic(notesStorage, args.oldFilename, args.newFilename);
+      
+      case 'add_concepts_to_note':
+        return await logic(notesStorage, args.filename, args.concepts);
+      
+      case 'remove_concepts_from_note':
+        return await logic(notesStorage, args.filename, args.concepts);
+      
+      case 'add_links_to_note':
+        return await logic(notesStorage, args.filename, args.links);
+      
+      case 'remove_links_from_note':
+        return await logic(notesStorage, args.filename, args.links);
+      
+      // Config tools
+      case 'get_storage_config':
+        return await this.getStorageConfig();
+      
+      case 'configure_notes_directory':
+        return await this.configureNotesDirectory(args.path);
+      
+      case 'generate_mcp_configuration':
+        return await this.generateMCPConfiguration();
+      
+      // Concept tools
+      case 'list_all_concepts':
+        return await logic(notesStorage, createSuccessResponse);
+      
+      case 'read_concept':
+        return await logic(notesStorage, args.conceptName, createSuccessResponse);
+      
+      case 'get_concept_relationships':
+        return await logic(notesStorage, args.conceptName, createSuccessResponse);
+      
+      // Media tools
+      case 'list_media_for_note':
+        return await logic(notesStorage, args.filename, createSuccessResponse);
+      
+      case 'save_media':
+        return await logic(notesStorage, args.filename, args.mediaFilename, args.mediaContent, createSuccessResponse);
+      
+      case 'load_media':
+        return await logic(notesStorage, args.filename, args.mediaFilename, createSuccessResponse);
+      
+      case 'delete_media':
+        return await logic(notesStorage, args.filename, args.mediaFilename, createSuccessResponse);
+      
+      // Search tools
+      case 'search_knowledge':
+        return await logic(notesStorage, args.query, args.includeContent || false, createSuccessResponse);
+      
+      case 'get_knowledge_stats':
+        return await logic(notesStorage, createSuccessResponse);
+      
+      case 'analyze_note_content':
+        return await logic(notesStorage, args.filename, createSuccessResponse);
+      
+      case 'get_recent_notes':
+        return await logic(notesStorage, args.limit || 10, createSuccessResponse);
+      
+      case 'get_similar_notes':
+        return await logic(notesStorage, args.filename, args.limit || 5, createSuccessResponse);
+      
+      default:
+        // Fallback to the old way for any tools not explicitly handled
+        return await logic(
+          notesStorage,
+          ...(Array.isArray(args) ? args : args ? Object.values(args) : []),
+          createSuccessResponse,
+          deps.store,
+          deps.app,
+          deps.path,
+          deps.getClaudeDesktopConfigPath
+        );
+    }
+  }
+
   private setupHandlers() {
 
     // List available tools
@@ -138,17 +253,8 @@ export class NotesMCPServer {
           return this.createErrorResponse('Notes storage not initialized. Use configure_notes_directory to set up a notes directory first.', name);
         }
         if (typeof logic === 'function') {
-          // Try to call with all dependencies and arguments
-          // (This can be improved with a per-tool signature map)
-          result = await logic(
-            deps.notesStorage,
-            ...(Array.isArray(args) ? args : args ? Object.values(args) : []),
-            deps.createSuccessResponse,
-            deps.store,
-            deps.app,
-            deps.path,
-            deps.getClaudeDesktopConfigPath
-          );
+          // Call tool logic with proper parameter handling
+          result = await this.callToolWithProperArgs(name, logic, args, deps);
         } else {
           return this.createErrorResponse(`Tool logic for '${name}' is not a function.`);
         }
