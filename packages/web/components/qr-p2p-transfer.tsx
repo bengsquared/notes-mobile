@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useRef } from 'react'
-import { QRScanner, parseConnectionQR } from './qr-scanner'
+import { QRScannerFullscreen } from './qr-scanner-fullscreen'
+import { parseConnectionQR } from '../lib/qr-utils'
 import { HTTPWebRTCManager, type HTTPWebRTCManagerEvents } from '../lib/http-webrtc-manager'
 import { deleteAllNotes } from '../lib/notes-storage'
 
@@ -284,30 +285,14 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
         )}
 
         {transferState === 'qr-scanning' && (
-          <div className="space-y-4">
-            <div className="text-center">
-              <h3 className="font-medium mb-2">Scan QR Code</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Point your camera at the QR code displayed on the desktop
-              </p>
-            </div>
-            
-            <QRScanner
-              onScan={handleQRScan}
-              onError={(error) => {
-                setErrorMessage(error)
-                setTransferState('error')
-              }}
-              className="mb-4"
-            />
-            
-            <button
-              onClick={reset}
-              className="w-full bg-gray-500 text-white py-2 rounded hover:bg-gray-600"
-            >
-              Cancel
-            </button>
-          </div>
+          <QRScannerFullscreen
+            onScan={handleQRScan}
+            onError={(error) => {
+              setErrorMessage(error)
+              setTransferState('error')
+            }}
+            onClose={reset}
+          />
         )}
 
         {transferState === 'pin-entry' && (

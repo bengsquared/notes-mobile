@@ -1,8 +1,14 @@
 {
-  "components/export-notes.tsx -> jszip": {
-    "id": 7262,
+  "../../node_modules/qr-scanner/qr-scanner.min.js -> ./qr-scanner-worker.min.js": {
+    "id": "../../node_modules/qr-scanner/qr-scanner.min.js -> ./qr-scanner-worker.min.js",
     "files": [
-      "static/chunks/262.af034d9216d35cf0.js"
+      "static/chunks/_app-pages-browser_node_modules_qr-scanner_qr-scanner-worker_min_js.js"
+    ]
+  },
+  "components/export-notes.tsx -> jszip": {
+    "id": "components/export-notes.tsx -> jszip",
+    "files": [
+      "static/chunks/_app-pages-browser_node_modules_jszip_dist_jszip_min_js.js"
     ]
   }
 }

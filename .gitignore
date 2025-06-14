@@ -81,3 +81,4 @@ mcp-server-runner.js
 # test/temp directories
 test-notes/
 *.js
+/packages/web/.next
