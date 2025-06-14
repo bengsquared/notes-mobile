@@ -175,13 +175,13 @@ export class NotesMCPServer {
       
       // Search tools
       case 'search_knowledge':
-        return await logic(notesStorage, args.query, args.includeContent || false, createSuccessResponse);
+        return await logic(notesStorage, args.query, args.includeIdeas || false, args.conceptFilter, args.contextDepth, createSuccessResponse);
       
       case 'get_knowledge_stats':
         return await logic(notesStorage, createSuccessResponse);
       
       case 'analyze_note_content':
-        return await logic(notesStorage, args.filename, createSuccessResponse);
+        return await logic(notesStorage, args.content, createSuccessResponse);
       
       case 'get_recent_notes':
         return await logic(notesStorage, args.limit || 10, createSuccessResponse);

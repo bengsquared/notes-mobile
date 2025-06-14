@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, ChevronLeft, Inbox, FileText, Pin, Clock, Hash, Plus, Settings } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronLeft, Inbox, FileText, Pin, Clock, Hash, Plus, Settings, Smartphone } from 'lucide-react'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { ScrollArea } from './ui/scroll-area'
@@ -35,7 +35,7 @@ export function NavigationSidebar({ layoutState, onStateChange, onToggleCollapse
   }, [ideas.length])
 
 
-  const handleNavigation = (view: 'inbox' | 'notes' | 'settings' | 'concepts-list' | 'pinned-list' | 'recent-notes-list') => {
+  const handleNavigation = (view: 'inbox' | 'notes' | 'settings' | 'concepts-list' | 'pinned-list' | 'recent-notes-list' | 'transfer') => {
     onStateChange({ ...layoutState, view, selectedNote: undefined, selectedConcept: undefined })
   }
 
@@ -396,8 +396,16 @@ export function NavigationSidebar({ layoutState, onStateChange, onToggleCollapse
         </div>
       </ScrollArea>
       
-      {/* Settings at bottom */}
-      <div className="p-2 border-t">
+      {/* Transfer and Settings at bottom */}
+      <div className="p-2 border-t space-y-1">
+        <Button
+          variant={layoutState.view === 'transfer' ? 'secondary' : 'ghost'}
+          className="w-full justify-start"
+          onClick={() => handleNavigation('transfer')}
+        >
+          <Smartphone className="mr-2 h-4 w-4" />
+          Transfer
+        </Button>
         <Button
           variant={layoutState.view === 'settings' ? 'secondary' : 'ghost'}
           className="w-full justify-start"

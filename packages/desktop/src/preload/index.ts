@@ -134,6 +134,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     generateTransferPin: () => ipcRenderer.invoke('generate-transfer-pin'),
     getCurrentPin: () => ipcRenderer.invoke('get-current-pin'),
     clearPin: () => ipcRenderer.invoke('clear-transfer-pin'),
-    clearTransferPin: () => ipcRenderer.invoke('clear-transfer-pin')
-  }
+    clearTransferPin: () => ipcRenderer.invoke('clear-transfer-pin'),
+    // HTTP Signaling methods
+    submitWebRTCAnswer: (pin: string, answer: string) => ipcRenderer.invoke('submit-webrtc-answer', pin, answer),
+    getPendingOffer: (pin: string) => ipcRenderer.invoke('get-pending-offer', pin)
+  },
+
+  // WebRTC is now handled entirely in the frontend - no preload methods needed
 });

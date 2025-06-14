@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { ArrowLeft, Trash2, SkipForward, Check, Smartphone, Copy, Undo, Redo, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Trash2, SkipForward, Check, Undo, Redo, AlertCircle } from 'lucide-react'
 import { useUndoRedo, useAutosave } from '@notes-app/shared'
 import { titleToFilename } from '../utils/filename'
 import { Button } from './ui/button'
@@ -26,8 +26,6 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
   // Use ideas from DataContext directly instead of local state
   const currentIndex = layoutState.inboxCurrentIndex ?? 0
   const [loading, setLoading] = useState(true)
-  const [transferPin, setTransferPin] = useState<string | null>(null)
-  const [generatePinLoading, setGeneratePinLoading] = useState(false)
   const [filenameError, setFilenameError] = useState<string | null>(null)
   const [isValidatingFilename, setIsValidatingFilename] = useState(false)
   const [processingTitle, setProcessingTitle] = useState(false)
@@ -325,39 +323,6 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
     })
   }
 
-  const generateTransferPin = async () => {
-    try {
-      setGeneratePinLoading(true)
-      
-      // Use the IPC system to generate PIN on the main process
-      if (window.electronAPI && window.electronAPI.transfer) {
-        const pin = await window.electronAPI.transfer.generateTransferPin()
-        setTransferPin(pin)
-        
-        // Auto-expire PIN after 5 minutes (UI state only, server handles expiry)
-        setTimeout(() => {
-          setTransferPin(null)
-        }, 5 * 60 * 1000)
-      } else {
-        console.error('Transfer API not available')
-      }
-    } catch (error) {
-      console.error('Error generating transfer PIN:', error)
-    } finally {
-      setGeneratePinLoading(false)
-    }
-  }
-
-  const copyTransferPin = async () => {
-    if (transferPin) {
-      try {
-        await navigator.clipboard.writeText(transferPin)
-        console.log('📋 Transfer PIN copied to clipboard')
-      } catch (error) {
-        console.error('Error copying to clipboard:', error)
-      }
-    }
-  }
 
   // Loading state
   useEffect(() => {
@@ -432,33 +397,6 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
                 </Button>
               </div>
 
-              {/* Transfer PIN Section */}
-              <div className="flex items-center gap-2">
-                {transferPin ? (
-                  <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded px-3 py-1">
-                    <Smartphone className="h-4 w-4 text-green-600" />
-                    <span className="font-mono text-sm">{transferPin}</span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={copyTransferPin}
-                      className="h-6 w-6 p-0"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={generateTransferPin}
-                    disabled={generatePinLoading}
-                  >
-                    <Smartphone className="h-4 w-4 mr-2" />
-                    {generatePinLoading ? 'Generating...' : 'Generate PIN'}
-                  </Button>
-                )}
-              </div>
             </div>
           </div>
         </div>
@@ -517,30 +455,7 @@ export function InboxProcessor({ layoutState, onStateChange }: InboxProcessorPro
 
             {/* Transfer PIN Section */}
             <div className="flex items-center gap-2">
-              {transferPin ? (
-                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded px-3 py-1">
-                  <Smartphone className="h-4 w-4 text-green-600" />
-                  <span className="font-mono text-sm">{transferPin}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={copyTransferPin}
-                    className="h-6 w-6 p-0"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={generateTransferPin}
-                  disabled={generatePinLoading}
-                >
-                  <Smartphone className="h-4 w-4 mr-2" />
-                  {generatePinLoading ? 'Generating...' : 'Generate PIN'}
-                </Button>
-              )}
+              
 
               {/* Undo/Redo buttons */}
               <div className="flex gap-1">

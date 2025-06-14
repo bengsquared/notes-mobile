@@ -8,6 +8,7 @@ export default function App() {
   const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
+
     // Check if storage directory is configured
     const checkStorageConfig = async () => {
       try {

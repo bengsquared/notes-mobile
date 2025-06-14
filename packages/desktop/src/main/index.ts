@@ -1,21 +1,19 @@
 import { app, BrowserWindow, ipcMain, dialog, Menu, Tray, nativeImage } from 'electron';
 import path from 'path';
-import { createServer } from 'http';
 import Store from 'electron-store';
 import { promises as fs } from 'fs';
 import { NotesStorage } from '../lib/storage';
 import { IPCHandlers } from './ipc-handlers';
 import { NotesMCPServer } from './mcp-server';
-import { WebRTCHandler } from './webrtc-handler';
+import { HTTPSignalingServer } from './http-signaling-server';
 import os from 'os';
-import { Bonjour } from 'bonjour-service';
 
 const { join } = path;
 
 // Helper functions for icon paths
 function getAppIcon(): string {
   const resourcesPath = app.isPackaged ? process.resourcesPath : join(__dirname, '../../');
-  
+
   if (process.platform === 'darwin') {
     return join(resourcesPath, 'resources/icon.icns');
   } else if (process.platform === 'win32') {
@@ -29,7 +27,7 @@ function getAppIcon(): string {
 function getTrayIcon(): Electron.NativeImage {
   if (process.platform === 'darwin') {
     // Use template icon for macOS tray (allows for proper dark/light mode handling)
-    const templatePath = app.isPackaged 
+    const templatePath = app.isPackaged
       ? join(process.resourcesPath, 'resources/template@2x.png')
       : join(__dirname, '../../resources/template@2x.png');
     return nativeImage.createFromPath(templatePath);
@@ -76,9 +74,7 @@ let pinExpiryTimeout: NodeJS.Timeout | null = null;
 let storage: NotesStorage | null = null;
 let ipcHandlers: IPCHandlers | null = null;
 let mcpServer: NotesMCPServer | null = null;
-let bonjour: any = null;
-let webrtcHandler: WebRTCHandler | null = null;
-let signalingServer: any = null;
+let httpSignalingServer: HTTPSignalingServer | null = null;
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -93,13 +89,21 @@ async function createWindow() {
     }
   });
 
+
   // Use app.isPackaged to determine if we're in production
   const isPackaged = app.isPackaged;
 
   if (!isPackaged && process.env.NODE_ENV !== 'production') {
+    logger.log('🔧 Development mode detected - loading from Vite dev server');
     // Development mode - use Vite dev server
     mainWindow.loadURL('http://localhost:5173');
-    mainWindow.webContents.openDevTools();
+    
+    // Force open dev tools in development
+    mainWindow.webContents.once('did-finish-load', () => {
+      logger.log('🔧 Opening dev tools in development mode');
+      mainWindow?.webContents.openDevTools();
+    });
+    
     // Show immediately in dev mode
     mainWindow.show();
   } else {
@@ -134,16 +138,32 @@ async function createWindow() {
     });
 
     // Ensure dev tools are closed
-    mainWindow.webContents.on('devtools-opened', () => {
-      if (isPackaged && mainWindow) {
-        mainWindow.webContents.closeDevTools();
-      }
-    });
+    // mainWindow.webContents.on('devtools-opened', () => {
+    //   if (isPackaged && mainWindow) {
+    //     mainWindow.webContents.closeDevTools();
+    //   }
+    // });
   }
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Stop HTTP signaling server when window closes
+    if (httpSignalingServer) {
+      httpSignalingServer.stop();
+      httpSignalingServer = null;
+    }
   });
+
+  // Start HTTP signaling server for P2P transfers
+  if (!httpSignalingServer) {
+    httpSignalingServer = new HTTPSignalingServer(mainWindow);
+    try {
+      await httpSignalingServer.start();
+      logger.log('📡 HTTP Signaling Server started for P2P transfers');
+    } catch (error) {
+      logger.error('📡 Failed to start HTTP Signaling Server:', error);
+    }
+  }
 }
 
 function createTray() {
@@ -318,6 +338,23 @@ function generatePIN(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+// Get local IP addresses for QR code generation
+function getLocalIPAddresses(): string[] {
+  const interfaces = os.networkInterfaces();
+  const addresses: string[] = [];
+  
+  for (const interfaceName of Object.keys(interfaces)) {
+    const nets = interfaces[interfaceName] || [];
+    for (const net of nets) {
+      if (net.family === 'IPv4' && !net.internal) {
+        addresses.push(net.address);
+      }
+    }
+  }
+  
+  return addresses;
+}
+
 // Generate new PIN with 5-minute expiry
 function generateTransferPIN(): string {
   // Clear any existing timeout
@@ -340,225 +377,13 @@ function generateTransferPIN(): string {
   return currentPIN;
 }
 
-// Validate PIN
-function validatePIN(pin: string): boolean {
-  return currentPIN !== null && currentPIN === pin;
-}
+// PIN validation is now handled in the frontend
 
-// Initialize WebRTC transfer system
-function setupWebRTCTransfer() {
-  // Initialize WebRTC handler for receiving notes
-  webrtcHandler = new WebRTCHandler((notes: any[]) => {
-    handleReceivedNotes(notes);
-  });
+// WebRTC is now handled entirely in the frontend - no main process setup needed
 
-  // Set up simple signaling server for WebRTC connections
-  setupSignalingServer();
-  
-  logger.log('🌐 WebRTC transfer system initialized');
-}
+// WebRTC signaling is now handled entirely in the frontend - no server needed
 
-function setupSignalingServer() {
-  // Get local IP address
-  const getLocalIP = () => {
-    const interfaces = os.networkInterfaces();
-    for (const interfaceName in interfaces) {
-      const networkInterface = interfaces[interfaceName];
-      if (networkInterface) {
-        for (const iface of networkInterface) {
-          if (iface.family === 'IPv4' && !iface.internal) {
-            return iface.address;
-          }
-        }
-      }
-    }
-    return '127.0.0.1';
-  };
-
-  const localIP = getLocalIP();
-
-  signalingServer = createServer((req: any, res: any) => {
-    // Set CORS headers for cross-origin requests from web apps
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-      res.writeHead(200);
-      res.end();
-      return;
-    }
-
-    // Handle discovery endpoint for web apps to find this desktop
-    if (req.method === 'GET' && req.url === '/discover') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        service: 'notes-app',
-        version: '1.0.0',
-        hostname: os.hostname(),
-        ip: localIP,
-        hasActivePIN: currentPIN !== null,
-        supportsWebRTC: true
-      }));
-      return;
-    }
-
-    // Handle WebRTC signaling
-    if (req.method === 'POST' && req.url === '/signal') {
-      let body = '';
-      req.on('data', (chunk: any) => {
-        body += chunk.toString();
-      });
-      req.on('end', async () => {
-        try {
-          const data = JSON.parse(body);
-          logger.log(`📡 Received signaling message: ${data.type}`);
-
-          if (data.type === 'getConnectionCode' && data.pin === currentPIN) {
-            // Generate connection code for WebRTC transfer
-            const code = webrtcHandler?.generateConnectionCode();
-            if (code) {
-              logger.log(`🔢 Generated WebRTC connection code: ${code}`);
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ success: true, code }));
-            } else {
-              res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Failed to generate connection code' }));
-            }
-          } else if (data.type === 'offer' && data.code && webrtcHandler) {
-            // Handle WebRTC offer
-            const answer = await webrtcHandler.handleOffer(data.code, data.offer);
-            if (answer) {
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ success: true, answer }));
-            } else {
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Invalid connection code or failed to create answer' }));
-            }
-          } else if (data.type === 'iceCandidate' && data.code && webrtcHandler) {
-            // Handle ICE candidate
-            await webrtcHandler.handleIceCandidate(data.code, data.candidate);
-            res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true }));
-          } else {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'Invalid request or missing/invalid PIN' }));
-          }
-        } catch (error) {
-          logger.error('❌ Signaling error:', error);
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Internal server error' }));
-        }
-      });
-    } else {
-      res.writeHead(404);
-      res.end();
-    }
-  });
-
-  // Use same ports as before for compatibility
-  const signalingPort = isDev ? 8081 : 8080;
-
-  signalingServer.listen(signalingPort, '0.0.0.0', () => {
-    logger.log(`🚀 WebRTC signaling server listening on ${localIP}:${signalingPort}`);
-    logger.log(`🔑 Initial PIN state: ${currentPIN ? `Active (${currentPIN})` : 'None'}`);
-
-    // Set up mDNS service advertisement
-    if (!bonjour) {
-      bonjour = new Bonjour();
-    }
-
-    // Advertise the notes transfer service with WebRTC support
-    const service = bonjour.publish({
-      name: `Notes-${os.hostname()}${isDev ? '-dev' : ''}`,
-      type: 'notes-transfer',
-      port: signalingPort,
-      txt: {
-        version: '1.0.0',
-        hostname: os.hostname(),
-        ip: localIP,
-        protocol: 'webrtc'
-      }
-    });
-
-    logger.log(`mDNS service advertised: Notes-${os.hostname()}._notes-transfer._tcp.local`);
-
-    service.on('up', () => {
-      logger.log('mDNS service is up and running');
-    });
-
-    service.on('error', (err: any) => {
-      logger.error('mDNS service error:', err);
-    });
-  });
-}
-
-// Handle notes received via WebRTC
-async function handleReceivedNotes(notes: any[]) {
-  try {
-    logger.log(`📝 Processing transfer of ${notes.length} notes via WebRTC`);
-
-    // Save notes as ideas
-    if (storage) {
-      logger.log(`💾 Saving ${notes.length} notes as ideas to storage`);
-      let savedCount = 0;
-      for (const note of notes) {
-        try {
-          // Create a title from the note content (first 50 chars, cleaned up)
-          const title = note.content
-            .trim()
-            .substring(0, 50)
-            .replace(/[\r\n]+/g, ' ')
-            .trim();
-
-          // Prepare the content with location info if available
-          let enrichedContent = note.content;
-          if (note.location && note.location.lat && note.location.lng) {
-            const { lat, lng } = note.location;
-            const mapsUrl = `https://maps.google.com/maps?q=${lat},${lng}`;
-            const locationInfo = `\n\n📍 **Location**: [${lat.toFixed(6)}, ${lng.toFixed(6)}](${mapsUrl})`;
-            enrichedContent = note.content + locationInfo;
-            logger.log(`  📍 Adding location data: ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-          }
-
-          await storage.createIdea(enrichedContent, {
-            title: title || 'Transferred note',
-            created: note.createdAt || new Date().toISOString(),
-            processed: false
-          });
-          savedCount++;
-          logger.log(`  ✓ Saved note ${savedCount}/${notes.length}: "${title}"`);
-        } catch (error) {
-          logger.error(`  ❌ Error saving note ${savedCount + 1}/${notes.length}:`, error);
-        }
-      }
-      logger.log(`💾 Successfully saved ${savedCount}/${notes.length} notes as ideas`);
-    } else {
-      logger.error(`❌ Storage not available! Cannot save notes.`);
-    }
-
-    // Process notes with media for any additional handling
-    const processedNotes = notes.map((note: any) => ({
-      ...note,
-      media: note.media || []
-    }));
-
-    logger.log(`📢 Sending notes-received event to renderer process`);
-    mainWindow?.webContents.send('notes-received', processedNotes);
-
-    // Clear PIN after successful transfer
-    logger.log(`🧹 Clearing PIN after successful transfer`);
-    currentPIN = null;
-    if (pinExpiryTimeout) {
-      clearTimeout(pinExpiryTimeout);
-      pinExpiryTimeout = null;
-    }
-
-    logger.log(`✅ WebRTC transfer completed successfully: ${notes.length} notes received`);
-  } catch (error) {
-    logger.error(`❌ Error processing WebRTC transfer:`, error);
-  }
-}
+// Notes are now handled entirely in the frontend via standard Electron APIs
 
 // Always run full Electron app, but skip initial window creation in MCP mode
 app.whenReady().then(async () => {
@@ -570,7 +395,7 @@ app.whenReady().then(async () => {
 
   // Create tray icon for all modes
   createTray();
-  
+
   // Create window immediately for faster startup (unless in MCP mode)
   if (!isMCPMode) {
     createWindow();
@@ -584,12 +409,9 @@ app.whenReady().then(async () => {
     }
   }
 
-  // Initialize storage and WebRTC transfer system in background
+  // Initialize storage in background
   if (!isMCPMode) {
-    Promise.all([
-      initializeStorage(),
-      setupWebRTCTransfer()
-    ]).catch(error => {
+    initializeStorage().catch(error => {
       logger.error('Background initialization failed:', error);
     });
   } else {
@@ -614,20 +436,9 @@ app.on('before-quit', () => {
     tray = null;
   }
 
-  if (bonjour) {
-    bonjour.destroy();
-    bonjour = null;
-  }
+  // mDNS cleanup is no longer needed
 
-  if (signalingServer) {
-    signalingServer.close();
-    signalingServer = null;
-  }
-  
-  if (webrtcHandler) {
-    webrtcHandler.cleanup();
-    webrtcHandler = null;
-  }
+  // WebRTC is now handled entirely in the frontend - no cleanup needed
 
   if (pinExpiryTimeout) {
     clearTimeout(pinExpiryTimeout);
@@ -656,8 +467,6 @@ app.on('browser-window-created', () => {
 
 // Initialize storage on startup
 async function initializeStorage() {
-  const isMCPMode = process.env.ENABLE_MCP_SERVER === 'true' || process.argv.includes('--mcp');
-
   logger.log('🗄️ Initializing storage...');
 
   // Debug electron-store
@@ -679,7 +488,6 @@ async function initializeStorage() {
 
 // Initialize storage with a specific directory
 async function initializeStorageWithDirectory(notesDirectory: string) {
-  const isMCPMode = process.env.ENABLE_MCP_SERVER === 'true' || process.argv.includes('--mcp');
 
   logger.log('🗄️ Using notes directory:', notesDirectory);
 
@@ -703,6 +511,7 @@ async function initializeStorageWithDirectory(notesDirectory: string) {
   }
 
   // Initialize MCP server if in MCP mode
+  const isMCPMode = process.env.ENABLE_MCP_SERVER === 'true' || process.argv.includes('--mcp');
   if (isMCPMode) {
     await initializeMCPServer();
   }
@@ -850,7 +659,7 @@ if (!isMCPMode) {
       logger.log('Main: Dialog options:', JSON.stringify(dialogOptions));
       logger.log('Main: Process platform:', process.platform);
 
-      let result;
+      let result: Electron.OpenDialogReturnValue;
       try {
         logger.log('Main: Showing directory selection dialog...');
         result = await dialog.showOpenDialog(mainWindow!, dialogOptions);
@@ -967,9 +776,17 @@ function registerTransferHandlers() {
   ipcMain.handle('generate-transfer-pin', () => {
     logger.log('🎯 IPC: generate-transfer-pin called from renderer');
     const pin = generateTransferPIN();
+    
+    // Get local IP addresses for QR code generation
+    const localIPs = getLocalIPAddresses();
+    const primaryIP = localIPs[0] || 'localhost';
+    logger.log('📡 IPC: Local IPs found:', localIPs, 'using primary:', primaryIP);
+    
     logger.log('📡 IPC: Sending transfer-pin-generated event to renderer');
-    mainWindow?.webContents.send('transfer-pin-generated', pin);
-    logger.log('🔄 IPC: Returning PIN to renderer');
+    logger.log('📡 IPC: mainWindow exists:', !!mainWindow);
+    logger.log('📡 IPC: webContents exists:', !!mainWindow?.webContents);
+    mainWindow?.webContents.send('transfer-pin-generated', { pin, ip: primaryIP, port: 8080 });
+    logger.log('🔄 IPC: Event sent, returning PIN to renderer');
     return pin;
   });
 
@@ -988,6 +805,27 @@ function registerTransferHandlers() {
     currentPIN = null;
     logger.log('🧹 IPC: PIN cleared');
     return true;
+  });
+
+  // HTTP Signaling Server handlers
+  ipcMain.handle('submit-webrtc-answer', (_event, pin: string, answer: string) => {
+    logger.log(`🎯 IPC: submit-webrtc-answer called for PIN ${pin}`);
+    if (httpSignalingServer) {
+      const success = httpSignalingServer.submitAnswer(pin, answer);
+      logger.log(`📡 IPC: Answer submitted - success: ${success}`);
+      return success;
+    }
+    return false;
+  });
+
+  ipcMain.handle('get-pending-offer', (_event, pin: string) => {
+    logger.log(`🎯 IPC: get-pending-offer called for PIN ${pin}`);
+    if (httpSignalingServer) {
+      const offer = httpSignalingServer.getPendingOffer(pin);
+      logger.log(`📡 IPC: Retrieved offer for PIN ${pin} - ${offer ? 'found' : 'not found'}`);
+      return offer;
+    }
+    return null;
   });
 }
 

@@ -7,6 +7,7 @@ import { SettingsPage } from './settings-page'
 import { RecentNotesList } from './recent-notes-list'
 import { PinnedList } from './pinned-list'
 import { ConceptsList } from './concepts-list'
+import { HTTPP2PTransfer } from './http-p2p-transfer'
 import type { LayoutState } from './main-layout'
 
 interface CenterPaneProps {
@@ -29,6 +30,14 @@ export function CenterPane({ layoutState, onStateChange }: CenterPaneProps) {
       <SettingsPage 
         onBack={() => onStateChange({ ...layoutState, view: 'notes', selectedNote: undefined, selectedConcept: undefined })}
       />
+    )
+  }
+
+  if (layoutState.view === 'transfer') {
+    return (
+      <div className="h-full flex items-center justify-center p-6">
+        <HTTPP2PTransfer />
+      </div>
     )
   }
 

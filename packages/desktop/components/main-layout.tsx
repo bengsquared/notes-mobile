@@ -12,7 +12,7 @@ import { dataHandler } from '../src/lib/data-handler'
 import type { Note, Concept } from '@notes-app/shared'
 
 export interface LayoutState {
-  view: 'inbox' | 'notes' | 'note-editor' | 'settings' | 'concepts-list' | 'pinned-list' | 'recent-notes-list' | 'concept-editor'
+  view: 'inbox' | 'notes' | 'note-editor' | 'settings' | 'concepts-list' | 'pinned-list' | 'recent-notes-list' | 'concept-editor' | 'transfer'
   selectedNote?: string
   selectedConcept?: string
   inboxCount: number
