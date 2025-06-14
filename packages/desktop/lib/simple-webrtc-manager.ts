@@ -21,7 +21,7 @@ export class SimpleWebRTCManager {
   private dataChannel: RTCDataChannel | null = null
   private config: WebRTCManagerConfig
   private events: WebRTCManagerEvents
-  
+
   // Connection state
   private connectionState: RTCPeerConnectionState = 'new'
   private receivedData = ''
@@ -29,17 +29,17 @@ export class SimpleWebRTCManager {
   constructor(config: WebRTCManagerConfig, events: WebRTCManagerEvents) {
     this.config = config
     this.events = events
-    
+
     console.log('🖥️ DESKTOP WebRTC: Simple manager initialized for', config.deviceType)
   }
 
   private initializePeerConnection() {
     console.log('🖥️ DESKTOP WebRTC: Initializing peer connection')
-    
+
     this.pc = new RTCPeerConnection({
       iceServers: this.config.iceServers
     })
-    
+
     this.pc.onicecandidate = (event) => {
       if (event.candidate) {
         console.log('🖥️ DESKTOP WebRTC: ICE candidate generated')
@@ -47,14 +47,14 @@ export class SimpleWebRTCManager {
         console.log('🖥️ DESKTOP WebRTC: ICE gathering complete')
       }
     }
-    
+
     this.pc.onconnectionstatechange = () => {
       const state = this.pc!.connectionState
       console.log('🖥️ DESKTOP WebRTC: Connection state changed to:', state)
       this.connectionState = state
       this.events.onConnectionStateChange(state)
     }
-    
+
     // Handle incoming data channels (from mobile)
     this.pc.ondatachannel = (event) => {
       console.log('🖥️ DESKTOP WebRTC: Received data channel')
@@ -66,31 +66,31 @@ export class SimpleWebRTCManager {
   // Handle offer from mobile and create answer
   async handleOffer(offerString: string): Promise<void> {
     console.log('🖥️ DESKTOP WebRTC: Handling offer from mobile')
-    
+
     try {
       // Initialize if not already done
       if (!this.pc) {
         this.initializePeerConnection()
       }
-      
+
       // Parse and set remote description
       const offer = JSON.parse(offerString)
       await this.pc!.setRemoteDescription(offer)
-      
+
       console.log('🖥️ DESKTOP WebRTC: Creating answer...')
       const answer = await this.pc!.createAnswer()
       await this.pc!.setLocalDescription(answer)
-      
+
       // Wait for ICE gathering to complete
       await this.waitForICEGathering()
-      
+
       // Get the complete answer with ICE candidates
       const completeAnswer = this.pc!.localDescription!
       const answerString = JSON.stringify(completeAnswer)
-      
+
       console.log('🖥️ DESKTOP WebRTC: Answer ready')
       this.events.onAnswerReady(answerString)
-      
+
     } catch (error) {
       console.error('🖥️ DESKTOP WebRTC: Error handling offer:', error)
       this.events.onError(error as Error)
@@ -99,17 +99,17 @@ export class SimpleWebRTCManager {
 
   private setupDataChannelEvents() {
     if (!this.dataChannel) return
-    
+
     console.log('🖥️ DESKTOP WebRTC: Setting up data channel events')
-    
+
     this.dataChannel.onopen = () => {
       console.log('🖥️ DESKTOP WebRTC: Data channel opened')
     }
-    
+
     this.dataChannel.onclose = () => {
       console.log('🖥️ DESKTOP WebRTC: Data channel closed')
     }
-    
+
     this.dataChannel.onerror = (error) => {
       // Only report errors if we're not in the process of disconnecting
       if (this.pc && this.pc.connectionState !== 'closed' && this.pc.connectionState !== 'disconnected') {
@@ -119,23 +119,23 @@ export class SimpleWebRTCManager {
         console.log('🖥️ DESKTOP WebRTC: Data channel error during cleanup (expected)')
       }
     }
-    
+
     this.dataChannel.onmessage = (event) => {
       const data = event.data
       console.log('🖥️ DESKTOP WebRTC: Received message:', typeof data === 'string' ? data.slice(0, 50) + '...' : 'binary')
-      
+
       if (data === 'TRANSFER_START') {
         console.log('🖥️ DESKTOP WebRTC: Transfer started')
         this.receivedData = ''
         return
       }
-      
+
       if (data === 'TRANSFER_END') {
         console.log('🖥️ DESKTOP WebRTC: Transfer completed, processing data')
         try {
           const transferData = JSON.parse(this.receivedData)
           this.events.onDataReceived(transferData)
-          
+
           // Clean up connection after processing data
           setTimeout(() => {
             console.log('🖥️ DESKTOP WebRTC: Cleaning up after successful transfer')
@@ -147,7 +147,7 @@ export class SimpleWebRTCManager {
         }
         return
       }
-      
+
       // Accumulate data chunks
       this.receivedData += data
     }
@@ -159,7 +159,7 @@ export class SimpleWebRTCManager {
         resolve()
         return
       }
-      
+
       const checkState = () => {
         if (this.pc!.iceGatheringState === 'complete') {
           resolve()
@@ -167,7 +167,7 @@ export class SimpleWebRTCManager {
           setTimeout(checkState, 100)
         }
       }
-      
+
       checkState()
     })
   }
@@ -178,17 +178,17 @@ export class SimpleWebRTCManager {
 
   disconnect() {
     console.log('🖥️ DESKTOP WebRTC: Disconnecting')
-    
+
     if (this.dataChannel) {
       this.dataChannel.close()
       this.dataChannel = null
     }
-    
+
     if (this.pc) {
       this.pc.close()
       this.pc = null
     }
-    
+
     this.receivedData = ''
     this.connectionState = 'closed'
     this.events.onConnectionStateChange('closed')

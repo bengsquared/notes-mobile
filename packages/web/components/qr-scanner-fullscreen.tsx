@@ -91,7 +91,13 @@ export function QRScannerFullscreen({ onScan, onError, onClose }: QRScannerFulls
         console.error('📱 QR Scanner: Failed to start:', error)
         
         if (mounted) {
-          const errorMessage = error instanceof Error ? error.message : 'Failed to start camera'
+          let errorMessage = error instanceof Error ? error.message : 'Failed to start camera'
+          
+          // Provide helpful message for camera permission issues
+          if (errorMessage.includes('https') || errorMessage.includes('secure') || errorMessage.includes('insecure')) {
+            errorMessage = 'Camera access requires secure connection. Please use manual PIN entry instead, or enable camera in browser settings.'
+          }
+          
           setScannerError(errorMessage)
           onError?.(errorMessage)
         }

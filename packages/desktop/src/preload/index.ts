@@ -121,8 +121,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onNotesReceived: (callback: (notes: any[]) => void) => {
       ipcRenderer.on('notes-received', (_event: any, notes: any[]) => callback(notes));
     },
-    onTransferPinGenerated: (callback: (pin: string) => void) => {
-      ipcRenderer.on('transfer-pin-generated', (_event: any, pin: string) => callback(pin));
+    onTransferPinGenerated: (callback: (data: { pin: string, ip: string, port: number }) => void) => {
+      ipcRenderer.on('transfer-pin-generated', (_event: any, data: { pin: string, ip: string, port: number }) => callback(data));
     },
     onPinGenerated: (callback: (pin: string) => void) => {
       ipcRenderer.on('transfer-pin-generated', (_event: any, pin: string) => callback(pin));
@@ -137,7 +137,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     clearTransferPin: () => ipcRenderer.invoke('clear-transfer-pin'),
     // HTTP Signaling methods
     submitWebRTCAnswer: (pin: string, answer: string) => ipcRenderer.invoke('submit-webrtc-answer', pin, answer),
-    getPendingOffer: (pin: string) => ipcRenderer.invoke('get-pending-offer', pin)
+    getPendingOffer: (pin: string) => ipcRenderer.invoke('get-pending-offer', pin),
+    onWebRTCOfferReceived: (callback: (data: { pin: string, offer: string }) => void) => {
+      console.log('📱 Preload: Setting up webrtc-offer-received listener');
+      ipcRenderer.on('webrtc-offer-received', (_event: any, data: { pin: string, offer: string }) => {
+        console.log('📱 Preload: Received webrtc-offer-received event:', data);
+        callback(data);
+      });
+    },
+    removeWebRTCOfferListener: (callback?: Function) => {
+      console.log('📱 Preload: Removing webrtc-offer-received listeners');
+      if (callback) {
+        ipcRenderer.removeListener('webrtc-offer-received', callback as any);
+      } else {
+        ipcRenderer.removeAllListeners('webrtc-offer-received');
+      }
+    }
   },
 
   // WebRTC is now handled entirely in the frontend - no preload methods needed

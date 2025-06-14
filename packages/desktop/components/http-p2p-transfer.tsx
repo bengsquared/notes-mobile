@@ -31,6 +31,7 @@ export function HTTPP2PTransfer() {
   const [connectionIP, setConnectionIP] = useState<string>('')
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
   const currentPinRef = useRef<string | null>(null)
+  const listenerSetup = useRef<boolean>(false)
 
   const webrtcManager = useRef<SimpleWebRTCManager | null>(null)
 
@@ -45,13 +46,29 @@ export function HTTPP2PTransfer() {
       window.addEventListener('online', handleOnline)
       window.addEventListener('offline', handleOffline)
 
+      // Listen for offers received via HTTP signaling
+      const handleOfferReceived = (data: { pin: string, offer: string }) => {
+        console.log('🖥️ DESKTOP: Received offer via IPC for PIN:', data.pin)
+        console.log('🖥️ DESKTOP: Current PIN ref:', currentPinRef.current)
+        if (data.pin === currentPinRef.current) {
+          console.log('🖥️ DESKTOP: PIN matches, processing offer...')
+          processOffer(data.offer)
+        } else {
+          console.log('🖥️ DESKTOP: PIN mismatch, ignoring offer')
+        }
+      }
+
+      // CRITICAL: Set up IPC listener for offers FIRST before any PIN generation
+      if (!listenerSetup.current) {
+        console.log('🖥️ DESKTOP: Setting up IPC listener for webrtc-offer-received EARLY')
+        window.electronAPI.transfer.onWebRTCOfferReceived(handleOfferReceived)
+        listenerSetup.current = true
+      }
+
       // Listen for HTTP signaling events
       console.log('🖥️ DESKTOP: Setting up onTransferPinGenerated listener...')
-      window.electronAPI.transfer.onTransferPinGenerated(async (data: { pin: string, ip: string, port: number } | string) => {
-        // Handle both old string format and new object format for backwards compatibility
-        const pin = typeof data === 'string' ? data : data.pin
-        const ip = typeof data === 'string' ? 'localhost' : data.ip
-        const port = typeof data === 'string' ? 8080 : data.port
+      window.electronAPI.transfer.onTransferPinGenerated(async (data: { pin: string, ip: string, port: number }) => {
+        const { pin, ip, port } = data
         
         console.log('🖥️ DESKTOP: *** PIN generated via IPC EVENT RECEIVED ***:', pin, 'IP:', ip)
         currentPinRef.current = pin
@@ -86,32 +103,13 @@ export function HTTPP2PTransfer() {
       // Set initial HTTP server status and start polling once we have a PIN
       setHttpServerStatus('Ready')
 
-      // Listen for offers received via HTTP signaling
-      const handleOfferReceived = (_event: any, data: { pin: string, offer: string }) => {
-        console.log('🖥️ DESKTOP: Received offer via IPC for PIN:', data.pin)
-        console.log('🖥️ DESKTOP: Current PIN ref:', currentPinRef.current)
-        if (data.pin === currentPinRef.current) {
-          console.log('🖥️ DESKTOP: PIN matches, processing offer...')
-          processOffer(data.offer)
-        } else {
-          console.log('🖥️ DESKTOP: PIN mismatch, ignoring offer')
-        }
-      }
-
-      // Add IPC listener for offers
-      if (window.electronAPI && (window as any).electronAPI.ipcRenderer) {
-        (window as any).electronAPI.ipcRenderer.on('webrtc-offer-received', handleOfferReceived)
-      }
-
       return () => {
         window.removeEventListener('online', handleOnline)
         window.removeEventListener('offline', handleOffline)
         stopOfferPolling()
         
-        // Remove IPC listener
-        if (window.electronAPI && (window as any).electronAPI.ipcRenderer) {
-          (window as any).electronAPI.ipcRenderer.removeListener('webrtc-offer-received', handleOfferReceived)
-        }
+        // Only remove IPC listener on actual component unmount
+        // Don't remove on re-renders
       }
     }
   }, [])
@@ -387,17 +385,18 @@ export function HTTPP2PTransfer() {
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Laptop className="h-5 w-5" />
-          Auto-Connect Transfer
-        </CardTitle>
-        <CardDescription>
-          Receive notes from mobile devices automatically via WiFi
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="h-full flex flex-col overflow-y-auto">
+      <Card className="flex-1 flex flex-col w-full max-w-md mx-auto">
+        <CardHeader className="flex-shrink-0">
+          <CardTitle className="flex items-center gap-2 ">
+            <Laptop className="h-5 w-5" />
+            Auto-Connect Transfer
+          </CardTitle>
+          <CardDescription>
+            Receive notes from mobile devices automatically via WiFi
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-y-auto space-y-4">
         {/* HTTP Server Status */}
         <div className="bg-blue-50 p-3 rounded-lg">
           <p className="text-xs text-blue-800">
@@ -463,6 +462,50 @@ export function HTTPP2PTransfer() {
           </div>
         )}
 
+        {/* QR Code Display */}
+        {showQRCode && qrCodeDataURL && (connectionState === 'waiting-for-offer' || connectionState === 'processing-offer') && (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <QrCode className="h-4 w-4 text-green-600" />
+              <p className="text-sm font-medium text-green-800">Instant Connection QR Code</p>
+            </div>
+            
+            <div className="bg-white p-3 rounded-lg border border-green-200 mb-3 inline-block">
+              <img 
+                src={qrCodeDataURL} 
+                alt="Connection QR Code" 
+                className="w-32 h-32 mx-auto"
+              />
+            </div>
+            
+            <p className="text-xs text-green-700 mb-2">
+              Scan with mobile camera or QR app for instant connection
+            </p>
+            
+            {/* Direct URL for testing */}
+            <div className="bg-white p-2 rounded border border-green-200 mb-2">
+              <p className="text-xs text-gray-600 mb-1">Or copy this URL for testing:</p>
+              <input 
+                type="text"
+                value={`http://localhost:3001/connect?ip=${connectionIP}&port=8080&pin=${connectionInfo.pin}&v=1.0`}
+                readOnly
+                className="w-full text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 font-mono"
+                onClick={(e) => {
+                  e.currentTarget.select()
+                  navigator.clipboard.writeText(e.currentTarget.value)
+                  console.log('URL copied to clipboard')
+                }}
+              />
+              <p className="text-xs text-gray-500 mt-1">Click to select and copy</p>
+            </div>
+            
+            <p className="text-xs text-green-600">
+              No network scanning required!
+            </p>
+          </div>
+        )}
+
+
         {/* PIN Display */}
         {connectionInfo.pin && (connectionState === 'waiting-for-offer' || connectionState === 'processing-offer') && (
           <div className="p-4 bg-primary/10 border border-primary/20 rounded-lg text-center">
@@ -521,49 +564,6 @@ export function HTTPP2PTransfer() {
           </div>
         )}
 
-        {/* QR Code Display */}
-        {showQRCode && qrCodeDataURL && (connectionState === 'waiting-for-offer' || connectionState === 'processing-offer') && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-            <div className="flex items-center justify-center gap-2 mb-3">
-              <QrCode className="h-4 w-4 text-green-600" />
-              <p className="text-sm font-medium text-green-800">Instant Connection QR Code</p>
-            </div>
-            
-            <div className="bg-white p-3 rounded-lg border border-green-200 mb-3 inline-block">
-              <img 
-                src={qrCodeDataURL} 
-                alt="Connection QR Code" 
-                className="w-32 h-32 mx-auto"
-              />
-            </div>
-            
-            <p className="text-xs text-green-700 mb-2">
-              Scan with mobile camera or QR app for instant connection
-            </p>
-            
-            {/* Direct URL for testing */}
-            <div className="bg-white p-2 rounded border border-green-200 mb-2">
-              <p className="text-xs text-gray-600 mb-1">Or copy this URL for testing:</p>
-              <input 
-                type="text"
-                value={`http://localhost:3001/connect?ip=${connectionIP}&port=8080&pin=${connectionInfo.pin}&v=1.0`}
-                readOnly
-                className="w-full text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1 font-mono"
-                onClick={(e) => {
-                  e.currentTarget.select()
-                  navigator.clipboard.writeText(e.currentTarget.value)
-                  console.log('URL copied to clipboard')
-                }}
-              />
-              <p className="text-xs text-gray-500 mt-1">Click to select and copy</p>
-            </div>
-            
-            <p className="text-xs text-green-600">
-              No network scanning required!
-            </p>
-          </div>
-        )}
-
         {/* How it works */}
         {connectionState === 'idle' && (
           <div className="text-xs text-muted-foreground space-y-1">
@@ -576,7 +576,8 @@ export function HTTPP2PTransfer() {
             </ol>
           </div>
         )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

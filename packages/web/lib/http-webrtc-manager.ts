@@ -33,6 +33,7 @@ export interface HTTPWebRTCManagerEvents {
   onDesktopDiscovered: (address: string) => void
   onOfferSent: () => void
   onConnected: () => void
+  onCertificateError?: (httpsUrl: string) => void
 }
 
 export class HTTPWebRTCManager {
@@ -40,8 +41,11 @@ export class HTTPWebRTCManager {
   private dataChannel: RTCDataChannel | null = null
   private events: HTTPWebRTCManagerEvents
   private desktopAddress: string | null = null
+  private desktopProtocol: string = 'http'
   private sessionId: string
   private isDisconnecting: boolean = false
+  private certificateErrorReported: boolean = false
+  private lastCertificateErrorUrl: string | null = null
   
   constructor(events: HTTPWebRTCManagerEvents) {
     this.events = events
@@ -53,6 +57,10 @@ export class HTTPWebRTCManager {
   // Discover desktop app on local network
   async discoverDesktop(): Promise<string> {
     console.log('📱 HTTP WebRTC: Discovering desktop app...')
+    
+    // Reset certificate error state for new discovery
+    this.certificateErrorReported = false
+    this.lastCertificateErrorUrl = null
     
     // Common local network patterns (real IP testing)
     const commonRanges = [
@@ -83,8 +91,9 @@ export class HTTPWebRTCManager {
           try {
             const response = await this.tryDiscoverAt(ip, port, timeout)
             if (response) {
-              console.log(`📱 HTTP WebRTC: Found desktop at ${ip}:${port}`)
+              console.log(`📱 HTTP WebRTC: Found desktop at ${response.protocol}://${ip}:${port}`)
               console.log(`📱 HTTP WebRTC: Discovery succeeded after ${totalAttempts} attempts`)
+              this.desktopProtocol = response.protocol
               this.events.onDesktopDiscovered(`${ip}:${port}`)
               return `${ip}:${port}`
             }
@@ -102,8 +111,9 @@ export class HTTPWebRTCManager {
           totalAttempts++
           const response = await this.tryDiscoverAt(baseIP, port, timeout)
           if (response) {
-            console.log(`📱 HTTP WebRTC: Found desktop at ${baseIP}:${port}`)
+            console.log(`📱 HTTP WebRTC: Found desktop at ${response.protocol}://${baseIP}:${port}`)
             console.log(`📱 HTTP WebRTC: Discovery succeeded after ${totalAttempts} attempts`)
+            this.desktopProtocol = response.protocol
             this.events.onDesktopDiscovered(`${baseIP}:${port}`)
             return `${baseIP}:${port}`
           }
@@ -114,6 +124,14 @@ export class HTTPWebRTCManager {
     }
     
     console.error(`📱 HTTP WebRTC: Discovery failed after ${totalAttempts} attempts across all ranges`)
+    
+    // If we had certificate errors but overall discovery failed, surface the certificate guidance
+    if (this.lastCertificateErrorUrl && this.events.onCertificateError && !this.certificateErrorReported) {
+      console.log('📱 HTTP WebRTC: Surfacing certificate error since discovery failed')
+      this.certificateErrorReported = true
+      this.events.onCertificateError(this.lastCertificateErrorUrl)
+    }
+    
     throw new Error('Desktop app not found on local network')
   }
 
@@ -121,32 +139,69 @@ export class HTTPWebRTCManager {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
     
-    try {
-      const response = await fetch(`http://${ip}:${port}/discover`, {
-        method: 'GET',
-        signal: controller.signal
-      })
-      
-      clearTimeout(timeoutId)
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log(`📱 HTTP WebRTC: Response from ${ip}:${port}:`, data)
-        if (data.status === 'available' && data.capabilities?.includes('webrtc-transfer')) {
-          return data
-        } else {
-          console.log(`📱 HTTP WebRTC: ${ip}:${port} responded but wrong capabilities:`, data)
+    // Try HTTPS first, then fallback to HTTP
+    const protocols = ['https', 'http']
+    
+    for (const protocol of protocols) {
+      try {
+        // For HTTPS with self-signed certificates, we need to handle certificate errors
+        const fetchOptions: RequestInit = {
+          method: 'GET',
+          signal: controller.signal
         }
-      } else {
-        console.log(`📱 HTTP WebRTC: ${ip}:${port} returned HTTP ${response.status}`)
+
+        // For self-signed certificates, we might get certificate errors
+        // but we can't disable certificate validation in fetch API
+        const response = await fetch(`${protocol}://${ip}:${port}/discover`, fetchOptions)
+        
+        clearTimeout(timeoutId)
+        
+        if (response.ok) {
+          const data = await response.json()
+          console.log(`📱 HTTP WebRTC: Response from ${protocol}://${ip}:${port}:`, data)
+          if (data.status === 'available' && data.capabilities?.includes('webrtc-transfer')) {
+            // Store the working protocol for later use
+            data.protocol = protocol
+            return data
+          } else {
+            console.log(`📱 HTTP WebRTC: ${protocol}://${ip}:${port} responded but wrong capabilities:`, data)
+          }
+        } else {
+          console.log(`📱 HTTP WebRTC: ${protocol}://${ip}:${port} returned HTTP ${response.status}`)
+        }
+      } catch (error: any) {
+        // Handle certificate errors specifically for HTTPS
+        if (protocol === 'https' && (
+          error.message.includes('certificate') || 
+          error.message.includes('SSL') || 
+          error.message.includes('TLS') ||
+          error.message.includes('net::ERR_CERT_AUTHORITY_INVALID') ||
+          error.message.includes('Failed to fetch')
+        )) {
+          console.log(`📱 HTTP WebRTC: ${protocol}://${ip}:${port} failed due to certificate issue: ${error.message}`)
+          console.log(`📱 HTTP WebRTC: This is expected for self-signed certificates. User needs to accept certificate manually.`)
+          
+          // Remember certificate error for later reference
+          const httpsUrl = `${protocol}://${ip}:${port}`
+          this.lastCertificateErrorUrl = httpsUrl
+          
+          // Notify about certificate error so UI can guide user (only once per manager instance)
+          if (this.events.onCertificateError && !this.certificateErrorReported) {
+            this.certificateErrorReported = true
+            this.events.onCertificateError(httpsUrl)
+          }
+          
+          // Still continue to try HTTP as fallback
+        } else {
+          console.log(`📱 HTTP WebRTC: ${protocol}://${ip}:${port} failed: ${error.message}`)
+        }
+        continue
       }
-      return null
-    } catch (error) {
-      clearTimeout(timeoutId)
-      // Only log specific errors for the first few IPs to avoid spam
-      const errorMessage = error.name === 'AbortError' ? 'timeout' : error.message
-      throw new Error(errorMessage)
     }
+    
+    clearTimeout(timeoutId)
+    const errorMessage = 'All protocols failed'
+    throw new Error(errorMessage)
   }
 
   // Connect to desktop using PIN
@@ -163,18 +218,35 @@ export class HTTPWebRTCManager {
   // Connect directly to desktop using QR code data
   async connectWithQRCode(qrData: { ip: string, port: number, pin: string }): Promise<void> {
     console.log(`📱 HTTP WebRTC: Connecting with QR code to ${qrData.ip}:${qrData.port}`)
+    console.log('📱 HTTP WebRTC: Full QR connection data:', qrData)
+    
+    // Reset certificate error state for new connection
+    this.certificateErrorReported = false
+    this.lastCertificateErrorUrl = null
     
     // Skip discovery - use QR code IP directly
     this.desktopAddress = `${qrData.ip}:${qrData.port}`
+    console.log('📱 HTTP WebRTC: Set desktop address to:', this.desktopAddress)
     
-    // Verify desktop is actually there
+    // Verify desktop is actually there and detect protocol
     try {
+      console.log('📱 HTTP WebRTC: Verifying desktop at address:', `${qrData.ip}:${qrData.port}`)
       const response = await this.tryDiscoverAt(qrData.ip, qrData.port, 3000)
       if (!response) {
         throw new Error('Desktop not found at QR code address')
       }
-      console.log('📱 HTTP WebRTC: Desktop verified via QR code')
+      this.desktopProtocol = response.protocol
+      console.log(`📱 HTTP WebRTC: Desktop verified via QR code using ${this.desktopProtocol}`)
     } catch (error) {
+      console.error('📱 HTTP WebRTC: QR verification failed:', error)
+      
+      // If we had certificate errors during QR verification, surface them
+      if (this.lastCertificateErrorUrl && this.events.onCertificateError && !this.certificateErrorReported) {
+        console.log('📱 HTTP WebRTC: Surfacing certificate error from QR verification')
+        this.certificateErrorReported = true
+        this.events.onCertificateError(this.lastCertificateErrorUrl)
+      }
+      
       throw new Error(`QR code connection failed: ${error.message}`)
     }
     
@@ -238,7 +310,11 @@ export class HTTPWebRTCManager {
     const completeOffer = JSON.stringify(this.pc.localDescription!)
     
     console.log('📱 HTTP WebRTC: Sending offer to desktop...')
-    const response = await fetch(`http://${this.desktopAddress}/signal/${pin}`, {
+    const signalUrl = `${this.desktopProtocol}://${this.desktopAddress}/signal/${pin}`
+    console.log('📱 HTTP WebRTC: Sending to URL:', signalUrl)
+    console.log('📱 HTTP WebRTC: PIN being used:', pin)
+    console.log('📱 HTTP WebRTC: Using protocol:', this.desktopProtocol)
+    const response = await fetch(signalUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -267,7 +343,8 @@ export class HTTPWebRTCManager {
     
     const poll = async (): Promise<void> => {
       try {
-        const response = await fetch(`http://${this.desktopAddress}/signal/${pin}`, {
+        const pollUrl = `${this.desktopProtocol}://${this.desktopAddress}/signal/${pin}`
+        const response = await fetch(pollUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -434,6 +511,9 @@ export class HTTPWebRTCManager {
     }
     
     this.desktopAddress = null
+    this.desktopProtocol = 'http'
+    this.certificateErrorReported = false
+    this.lastCertificateErrorUrl = null
   }
 
   getConnectionState(): RTCPeerConnectionState {

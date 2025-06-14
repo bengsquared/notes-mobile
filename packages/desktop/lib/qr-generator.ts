@@ -42,9 +42,8 @@ export async function generateConnectionQR(
   const qrOptions = { ...defaultOptions, ...options }
   
   // Create connection URL that the web app can parse
-  // In development, assume web app is running on localhost:3000
-  // In production, use the actual deployed URL
-  const connectionUrl = `http://localhost:3001/connect?ip=${connectionData.ip}&port=${connectionData.port}&pin=${connectionData.pin}&v=${connectionData.version || '1.0'}`
+  // Use a custom protocol that doesn't require a web server
+  const connectionUrl = `notes-transfer://connect?ip=${connectionData.ip}&port=${connectionData.port}&pin=${connectionData.pin}&v=${connectionData.version || '1.0'}`
   
   try {
     const qrSvg = await QRCode.toString(connectionUrl, {
@@ -75,7 +74,7 @@ export async function generateConnectionQRDataURL(
 
   const qrOptions = { ...defaultOptions, ...options }
   
-  const connectionUrl = `http://localhost:3001/connect?ip=${connectionData.ip}&port=${connectionData.port}&pin=${connectionData.pin}&v=${connectionData.version || '1.0'}`
+  const connectionUrl = `notes-transfer://connect?ip=${connectionData.ip}&port=${connectionData.port}&pin=${connectionData.pin}&v=${connectionData.version || '1.0'}`
   
   try {
     const qrDataURL = await QRCode.toDataURL(connectionUrl, {

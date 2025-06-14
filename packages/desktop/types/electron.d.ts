@@ -122,7 +122,7 @@ export interface ElectronAPI {
   // Transfer operations
   transfer: {
     onNotesReceived: (callback: (notes: any[]) => void) => void
-    onTransferPinGenerated: (callback: (pin: string) => void) => void
+    onTransferPinGenerated: (callback: (data: { pin: string, ip: string, port: number }) => void) => void
     onPinGenerated: (callback: (pin: string) => void) => void
     onPinExpired: (callback: () => void) => void
     generatePin: () => Promise<string>
@@ -130,6 +130,8 @@ export interface ElectronAPI {
     getCurrentPin: () => Promise<string | null>
     clearPin: () => Promise<boolean>
     clearTransferPin: () => Promise<boolean>
+    onWebRTCOfferReceived: (callback: (data: { pin: string, offer: string }) => void) => void
+    removeWebRTCOfferListener: () => void
   }
 
   // Top-level APIs (for settings page compatibility)

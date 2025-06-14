@@ -82,3 +82,6 @@ mcp-server-runner.js
 test-notes/
 *.js
 /packages/web/.next
+packages/web/.next/server/app/page.js
+packages/web/.next/server/webpack-runtime.js
+packages/web/.next/trace

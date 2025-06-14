@@ -138,6 +138,11 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
       },
       onConnected: () => {
         setConnectionProgress('WebRTC connection established!')
+      },
+      onCertificateError: (httpsUrl) => {
+        console.log('📱 QR Transfer: Certificate error for:', httpsUrl)
+        setErrorMessage(`HTTPS connection failed due to self-signed certificate. Please visit ${httpsUrl} in a new tab, accept the certificate warning, then try again.`)
+        setTransferState('error')
       }
     }
 
@@ -180,6 +185,11 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
       },
       onConnected: () => {
         setConnectionProgress('WebRTC connection established!')
+      },
+      onCertificateError: (httpsUrl) => {
+        console.log('📱 QR Transfer: Certificate error for:', httpsUrl)
+        setErrorMessage(`HTTPS connection failed due to self-signed certificate. Please visit ${httpsUrl} in a new tab, accept the certificate warning, then try again.`)
+        setTransferState('error')
       }
     }
 
@@ -285,14 +295,34 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
         )}
 
         {transferState === 'qr-scanning' && (
-          <QRScannerFullscreen
-            onScan={handleQRScan}
-            onError={(error) => {
-              setErrorMessage(error)
-              setTransferState('error')
-            }}
-            onClose={reset}
-          />
+          <div className="space-y-4">
+            <QRScannerFullscreen
+              onScan={handleQRScan}
+              onError={(error) => {
+                console.log('📱 QR Scanner error:', error)
+                // Don't auto-transition to error state, let user choose manual entry
+                setErrorMessage(`Camera error: ${error}`)
+              }}
+              onClose={reset}
+            />
+            
+            {/* Fallback option if camera fails */}
+            {errorMessage && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800 mb-3">{errorMessage}</p>
+                <button
+                  onClick={() => {
+                    setConnectionMethod('manual')
+                    setTransferState('pin-entry')
+                    setErrorMessage('')
+                  }}
+                  className="w-full bg-yellow-600 text-white py-2 rounded hover:bg-yellow-700"
+                >
+                  Enter PIN Manually Instead
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         {transferState === 'pin-entry' && (
