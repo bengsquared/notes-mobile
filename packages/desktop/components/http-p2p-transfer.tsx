@@ -32,6 +32,8 @@ export function HTTPP2PTransfer() {
   const pollingInterval = useRef<NodeJS.Timeout | null>(null)
   const currentPinRef = useRef<string | null>(null)
   const listenerSetup = useRef<boolean>(false)
+  const pinGeneratedListenerSetup = useRef<boolean>(false)
+  const processingOffer = useRef<boolean>(false)
 
   const webrtcManager = useRef<SimpleWebRTCManager | null>(null)
 
@@ -65,9 +67,11 @@ export function HTTPP2PTransfer() {
         listenerSetup.current = true
       }
 
-      // Listen for HTTP signaling events
-      console.log('🖥️ DESKTOP: Setting up onTransferPinGenerated listener...')
-      window.electronAPI.transfer.onTransferPinGenerated(async (data: { pin: string, ip: string, port: number }) => {
+      // Listen for HTTP signaling events (only once)
+      if (!pinGeneratedListenerSetup.current) {
+        console.log('🖥️ DESKTOP: Setting up onTransferPinGenerated listener...')
+        pinGeneratedListenerSetup.current = true
+        window.electronAPI.transfer.onTransferPinGenerated(async (data: { pin: string, ip: string, port: number }) => {
         const { pin, ip, port } = data
         
         console.log('🖥️ DESKTOP: *** PIN generated via IPC EVENT RECEIVED ***:', pin, 'IP:', ip)
@@ -99,6 +103,7 @@ export function HTTPP2PTransfer() {
           // Continue without QR code - PIN still works
         }
       })
+      }
 
       // Set initial HTTP server status and start polling once we have a PIN
       setHttpServerStatus('Ready')
@@ -286,6 +291,15 @@ export function HTTPP2PTransfer() {
 
   const processOffer = async (offerString: string) => {
     console.log('🖥️ DESKTOP: processOffer called with offer length:', offerString?.length)
+    
+    // Prevent duplicate offer processing
+    if (processingOffer.current) {
+      console.log('🖥️ DESKTOP: Already processing an offer, ignoring duplicate')
+      return
+    }
+    
+    processingOffer.current = true
+    
     try {
       setConnectionState('processing-offer')
       setErrorMessage('')
@@ -307,6 +321,9 @@ export function HTTPP2PTransfer() {
       console.error('🖥️ DESKTOP: Error processing offer:', error)
       setConnectionState('error')
       setErrorMessage(error instanceof Error ? error.message : 'Failed to process offer')
+    } finally {
+      // Reset the processing flag regardless of success or failure
+      processingOffer.current = false
     }
   }
 
@@ -328,6 +345,9 @@ export function HTTPP2PTransfer() {
     })
     setErrorMessage('')
     setReceivedNotes([])
+    
+    // Reset processing flags
+    processingOffer.current = false
     
     // Clear QR code
     setQrCodeDataURL(null)

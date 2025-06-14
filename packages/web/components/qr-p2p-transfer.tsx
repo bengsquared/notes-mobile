@@ -29,6 +29,7 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
   const [manualIP, setManualIP] = useState('')
   const [connectionMethod, setConnectionMethod] = useState<'qr' | 'pin' | 'manual' | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [certificateErrorShown, setCertificateErrorShown] = useState(false)
 
   const webrtcManager = useRef<HTTPWebRTCManager | null>(null)
 
@@ -47,14 +48,18 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
     
     try {
       setTransferState('connecting')
+      setCertificateErrorShown(false) // Reset certificate error flag
       setConnectionProgress(`Connecting to ${connectionData.ip}:${connectionData.port}...`)
       
       await connectWithData(connectionData)
       
     } catch (error) {
       console.error('📱 QR Transfer: QR connection failed:', error)
-      setErrorMessage(error instanceof Error ? error.message : 'QR connection failed')
-      setTransferState('error')
+      // Don't overwrite certificate error messages
+      if (!certificateErrorShown) {
+        setErrorMessage(error instanceof Error ? error.message : 'QR connection failed')
+        setTransferState('error')
+      }
     }
   }
 
@@ -66,6 +71,7 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
 
     try {
       setTransferState('connecting')
+      setCertificateErrorShown(false) // Reset certificate error flag
       setConnectionProgress('Discovering desktop on network...')
       
       // Use existing PIN-based connection (with network discovery)
@@ -73,8 +79,11 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
       
     } catch (error) {
       console.error('📱 QR Transfer: PIN connection failed:', error)
-      setErrorMessage(error instanceof Error ? error.message : 'PIN connection failed')
-      setTransferState('error')
+      // Don't overwrite certificate error messages
+      if (!certificateErrorShown) {
+        setErrorMessage(error instanceof Error ? error.message : 'PIN connection failed')
+        setTransferState('error')
+      }
     }
   }
 
@@ -86,6 +95,7 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
 
     try {
       setTransferState('connecting')
+      setCertificateErrorShown(false) // Reset certificate error flag
       setConnectionProgress(`Connecting to ${manualIP}...`)
       
       // Connect directly using IP and PIN (bypass network discovery)
@@ -98,8 +108,11 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
       
     } catch (error) {
       console.error('📱 QR Transfer: Manual connection failed:', error)
-      setErrorMessage(error instanceof Error ? error.message : 'Manual connection failed')
-      setTransferState('error')
+      // Don't overwrite certificate error messages
+      if (!certificateErrorShown) {
+        setErrorMessage(error instanceof Error ? error.message : 'Manual connection failed')
+        setTransferState('error')
+      }
     }
   }
 
@@ -141,6 +154,7 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
       },
       onCertificateError: (httpsUrl) => {
         console.log('📱 QR Transfer: Certificate error for:', httpsUrl)
+        setCertificateErrorShown(true)
         setErrorMessage(`HTTPS connection failed due to self-signed certificate. Please visit ${httpsUrl} in a new tab, accept the certificate warning, then try again.`)
         setTransferState('error')
       }
@@ -188,6 +202,7 @@ export function QRP2PTransfer({ notes, onTransferComplete, onNotesDeleted }: QRP
       },
       onCertificateError: (httpsUrl) => {
         console.log('📱 QR Transfer: Certificate error for:', httpsUrl)
+        setCertificateErrorShown(true)
         setErrorMessage(`HTTPS connection failed due to self-signed certificate. Please visit ${httpsUrl} in a new tab, accept the certificate warning, then try again.`)
         setTransferState('error')
       }

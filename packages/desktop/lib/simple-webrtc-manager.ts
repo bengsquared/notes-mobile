@@ -53,6 +53,21 @@ export class SimpleWebRTCManager {
       console.log('🖥️ DESKTOP WebRTC: Connection state changed to:', state)
       this.connectionState = state
       this.events.onConnectionStateChange(state)
+      
+      if (state === 'failed') {
+        console.log('🖥️ DESKTOP WebRTC: Connection failed, attempting ICE restart')
+        // Note: ICE restart would require re-negotiation, which is complex
+        // For now, we'll let the application handle the failure
+      }
+    }
+
+    this.pc.oniceconnectionstatechange = () => {
+      const iceState = this.pc!.iceConnectionState
+      console.log('🖥️ DESKTOP WebRTC: ICE connection state changed to:', iceState)
+      
+      if (iceState === 'failed' || iceState === 'disconnected') {
+        console.log('🖥️ DESKTOP WebRTC: ICE connection issues detected')
+      }
     }
 
     // Handle incoming data channels (from mobile)
@@ -155,13 +170,24 @@ export class SimpleWebRTCManager {
 
   private async waitForICEGathering(): Promise<void> {
     return new Promise((resolve) => {
+      console.log('🖥️ DESKTOP WebRTC: Current ICE gathering state:', this.pc!.iceGatheringState)
+      
       if (this.pc!.iceGatheringState === 'complete') {
+        console.log('🖥️ DESKTOP WebRTC: ICE gathering already complete')
         resolve()
         return
       }
 
+      // Set a timeout to prevent hanging forever
+      const timeout = setTimeout(() => {
+        console.log('🖥️ DESKTOP WebRTC: ICE gathering timeout - proceeding anyway')
+        resolve()
+      }, 5000) // 5 second timeout
+
       const checkState = () => {
         if (this.pc!.iceGatheringState === 'complete') {
+          console.log('🖥️ DESKTOP WebRTC: ICE gathering completed')
+          clearTimeout(timeout)
           resolve()
         } else {
           setTimeout(checkState, 100)
