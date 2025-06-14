@@ -13,8 +13,10 @@ packages/*/build
 
 # next.js
 .next/
-packages/web/.next/
+packages/web/.next
 out/
+packages/web/.next/
+packages/web/out/
 
 # production
 build
@@ -78,3 +80,4 @@ mcp-server-runner.js
 
 # test/temp directories
 test-notes/
+*.js
